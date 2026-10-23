@@ -17,7 +17,13 @@ struct ResolvedEphemeralBotCommand {
                     let commandEntity = MessageTextEntity(range: 0 ..< commandLength, type: .BotCommand)
                     if let index = attributes.firstIndex(where: { $0 is TextEntitiesMessageAttribute }), let attribute = attributes[index] as? TextEntitiesMessageAttribute {
                         if !attribute.entities.contains(commandEntity) {
-                            attributes[index] = TextEntitiesMessageAttribute(entities: attribute.entities + [commandEntity])
+                            let entities = (attribute.entities + [commandEntity]).sorted { lhs, rhs in
+                                if lhs.range.lowerBound != rhs.range.lowerBound {
+                                    return lhs.range.lowerBound < rhs.range.lowerBound
+                                }
+                                return lhs.range.upperBound > rhs.range.upperBound
+                            }
+                            attributes[index] = TextEntitiesMessageAttribute(entities: entities)
                         }
                     } else {
                         attributes.append(TextEntitiesMessageAttribute(entities: [commandEntity]))

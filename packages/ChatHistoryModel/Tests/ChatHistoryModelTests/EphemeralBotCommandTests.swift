@@ -58,7 +58,7 @@ final class EphemeralBotCommandTests: XCTestCase {
         XCTAssertEqual(outgoing.state, .sending)
         let entities = try XCTUnwrap(attributes.compactMap { $0 as? TextEntitiesMessageAttribute }.first).entities
         XCTAssertTrue(entities.contains(bold))
-        XCTAssertTrue(entities.contains(MessageTextEntity(range: 0 ..< 18, type: .BotCommand)))
+        XCTAssertEqual(entities.first, MessageTextEntity(range: 0 ..< 18, type: .BotCommand))
     }
 
     func testEveryChunkRemainsPrivateWithoutRepeatingCommandEntity() throws {
