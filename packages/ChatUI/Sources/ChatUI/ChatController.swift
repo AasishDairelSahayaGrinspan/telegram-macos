@@ -2457,6 +2457,7 @@ open class ChatController<Context: AccountContextProtocol>: TelegramGenericViewC
     private let replyMessageDisposable = MetaDisposable()
     private let deleteChatDisposable: MetaDisposable = MetaDisposable()
     private let loadSelectionMessagesDisposable: MetaDisposable = MetaDisposable()
+    private var currentRanks: CachedChannelAdminRanks?
     private let updateMediaDisposable = MetaDisposable()
     private let editCurrentMessagePhotoDisposable = MetaDisposable()
     private var editingSessionId: Int = 0
@@ -4106,6 +4107,7 @@ open class ChatController<Context: AccountContextProtocol>: TelegramGenericViewC
                     if case let .cacheEntry(id, data) = additionalEntry {
                         if id == cachedChannelAdminRanksEntryId(peerId: peerId), let data = data?.get(CachedChannelAdminRanks.self)  {
                             ranks = data
+                            self.currentRanks = data
                         }
                         break
                     }
@@ -5350,7 +5352,7 @@ open class ChatController<Context: AccountContextProtocol>: TelegramGenericViewC
                         _ = peer.id
                         var _mustDeleteForEveryoneMessage: Bool = true
                         for message in messages {
-                            if !canDeleteMessage(message, account: context.account, chatLocation: chatLocation(), mode: mode) {
+                            if !canDeleteMessage(message, account: context.account, chatLocation: chatLocation(), mode: mode, ranks: strongSelf.currentRanks) {
                                 canDelete = false
                             }
                             if !mustDeleteForEveryoneMessage(message) {
@@ -11396,7 +11398,7 @@ open class ChatController<Context: AccountContextProtocol>: TelegramGenericViewC
                         var canForward:Bool = !messages.isEmpty && !context.isFrozen
                         if let chatInteraction = self?.chatInteraction {
                             for message in messages {
-                                if !canDeleteMessage(message, account: context.account, chatLocation: value.chatLocation, mode: mode) {
+                                if !canDeleteMessage(message, account: context.account, chatLocation: value.chatLocation, mode: mode, ranks: self?.currentRanks) {
                                     canDelete = false
                                 }
                                 if !canForwardMessage(message, chatInteraction: chatInteraction) {
