@@ -152,7 +152,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
 }
 
 
-public func NotificationSoundController(context: any AccountContextProtocol) -> InputDataController {
+public func NotificationSoundController(context: any AccountContextProtocol, tone: Signal<PeerMessageSound, NoError>? = nil, updateTone: ((PeerMessageSound)->Void)? = nil) -> InputDataController {
 
     let actionsDisposable = DisposableSet()
 
@@ -178,7 +178,11 @@ public func NotificationSoundController(context: any AccountContextProtocol) -> 
             })
             
         }
-        _ = updateInAppNotificationSettingsInteractively(accountManager: context.sharedContext.accountManager, {$0.withUpdatedTone(tone)}).start()
+        if let updateTone = updateTone {
+            updateTone(tone)
+        } else {
+            _ = updateInAppNotificationSettingsInteractively(accountManager: context.sharedContext.accountManager, {$0.withUpdatedTone(tone)}).start()
+        }
     }
 
     let arguments = Arguments(context: context, selectSound: selectTone, upload: {
@@ -216,12 +220,14 @@ public func NotificationSoundController(context: any AccountContextProtocol) -> 
         return InputDataSignalValue(entries: entries(state, arguments: arguments))
     }
     
-    let dataSignal = combineLatest(queue: .mainQueue(), appNotificationSettings(accountManager: context.sharedContext.accountManager), context.engine.peers.notificationSoundList())
+    let toneSignal: Signal<PeerMessageSound, NoError> = tone ?? (appNotificationSettings(accountManager: context.sharedContext.accountManager) |> map { $0.tone })
     
-    actionsDisposable.add(dataSignal.start(next: { value, list in
+    let dataSignal = combineLatest(queue: .mainQueue(), toneSignal, context.engine.peers.notificationSoundList())
+    
+    actionsDisposable.add(dataSignal.start(next: { tone, list in
         updateState { current in
             var current = current
-            current.tone = value.tone
+            current.tone = tone
             current.list = list?.sounds.filter { value in
                 return true//value.file.mimeType.contains("m4a")
             }

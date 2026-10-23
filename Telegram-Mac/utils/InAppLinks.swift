@@ -428,6 +428,23 @@ private func detectIDNHomograph(_ host: String) -> (isHomograph: Bool, asciiHost
     return (false, asciiHost ?? host)
 }
 
+private func notificationCategoryEntryTag(_ section: InAppSettingsSection.NotificationsSubSection.ChatNotificationSubSection) -> NotificationCategoryEntryTag? {
+    switch section {
+    case .edit:
+        return nil
+    case .show:
+        return .show
+    case .preview:
+        return .preview
+    case .sound:
+        return .sound
+    case .add_exception:
+        return .addException
+    case .delete_exceptions:
+        return .deleteExceptions
+    }
+}
+
 func execute(inapp:inAppLink, window: Window? = nil, isExternal: Bool = false, afterComplete: @escaping(Bool)->Void = { _ in }) {
 
     let getWindow:(AccountContext)->Window = { context in
@@ -1648,15 +1665,35 @@ func execute(inapp:inAppLink, window: Window? = nil, isExternal: Bool = false, a
                 controller = NotificationPreferencesController(context, focusOnItemTag: .badgeEnabled)
             case .show:
                 controller = NotificationPreferencesController(context, focusOnItemTag: .messagePreviews)
-            case .private_chats(let chatSubSection), .groups(let chatSubSection), .channels(let chatSubSection):
-                switch chatSubSection {
-                case .none:
-                    controller = NotificationPreferencesController(context)
-                case .show:
-                    controller = NotificationPreferencesController(context, focusOnItemTag: .messagePreviews)
+            case .accounts:
+                controller = NotificationPreferencesController(context, focusOnItemTag: .allAccounts)
+            case .new_contacts:
+                controller = NotificationPreferencesController(context, focusOnItemTag: .joinedNotifications)
+            case .reset:
+                controller = NotificationPreferencesController(context, focusOnItemTag: .reset)
+            case let .private_chats(chatSubSection):
+                controller = NotificationCategorySettingsController(context: context, category: .privateChats, focusOnItemTag: chatSubSection.flatMap(notificationCategoryEntryTag))
+            case let .groups(chatSubSection):
+                controller = NotificationCategorySettingsController(context: context, category: .groupChats, focusOnItemTag: chatSubSection.flatMap(notificationCategoryEntryTag))
+            case let .channels(chatSubSection):
+                controller = NotificationCategorySettingsController(context: context, category: .channels, focusOnItemTag: chatSubSection.flatMap(notificationCategoryEntryTag))
+            case .stories:
+                controller = NotificationPreferencesController(context)
+            case let .reactions(reactionsSubSection):
+                let tag: ReactionNotificationEntryTag?
+                switch reactionsSubSection {
+                case .messages:
+                    tag = .messages
+                case .stories:
+                    tag = nil
+                case .show_sender:
+                    tag = .showSender
                 case .sound:
-                    controller = NotificationPreferencesController(context, focusOnItemTag: .tone)
+                    tag = .sound
+                case .none:
+                    tag = nil
                 }
+                controller = ReactionNotificationSettingsController(context: context, focusOnItemTag: tag)
             }
         case let .calls(subSection):
             switch subSection {

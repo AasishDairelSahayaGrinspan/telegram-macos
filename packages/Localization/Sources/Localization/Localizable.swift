@@ -11401,6 +11401,8 @@ public final class L10n {
   public static var notificationGroupCallOutgoing: String  { return L10n.tr("Localizable", "Notification.GroupCall.Outgoing") }
   /// Type a message...
   public static var notificationInputReply: String  { return L10n.tr("Localizable", "Notification.Input.Reply") }
+  /// New reaction to your message
+  public static var notificationReactionHidden: String  { return L10n.tr("Localizable", "Notification.Reaction.Hidden") }
   /// Saved Gift
   public static var notificationStarGiftSelfTitle: String  { return L10n.tr("Localizable", "Notification.StarGift.Self.Title") }
   /// %@ transferred a unique collectible to you
@@ -11463,12 +11465,20 @@ public final class L10n {
   public static var notificationSettingsBadgeHeader: String  { return L10n.tr("Localizable", "NotificationSettings.BadgeHeader") }
   /// Bounce Dock Icon
   public static var notificationSettingsBounceDockIcon: String  { return L10n.tr("Localizable", "NotificationSettings.BounceDockIcon") }
+  /// Channels
+  public static var notificationSettingsChannels: String  { return L10n.tr("Localizable", "NotificationSettings.Channels") }
   /// New Contacts
   public static var notificationSettingsContactJoined: String  { return L10n.tr("Localizable", "NotificationSettings.ContactJoined") }
   /// Receive notifications when one of your contacts becomes available on Telegram.
   public static var notificationSettingsContactJoinedInfo: String  { return L10n.tr("Localizable", "NotificationSettings.ContactJoinedInfo") }
   /// Count Unread Messages
   public static var notificationSettingsCountUnreadMessages: String  { return L10n.tr("Localizable", "NotificationSettings.CountUnreadMessages") }
+  /// %1$d exceptions
+  public static func notificationSettingsExceptionsOther(_ p1: Int) -> String {
+    return L10n.tr("Localizable", "NotificationSettings.Exceptions_other", p1)
+  }
+  /// Group Chats
+  public static var notificationSettingsGroupChats: String  { return L10n.tr("Localizable", "NotificationSettings.GroupChats") }
   /// Include Channels
   public static var notificationSettingsIncludeChannels: String  { return L10n.tr("Localizable", "NotificationSettings.IncludeChannels") }
   /// Include Groups
@@ -11477,10 +11487,28 @@ public final class L10n {
   public static var notificationSettingsIncludeMutedChats: String  { return L10n.tr("Localizable", "NotificationSettings.IncludeMutedChats") }
   /// Include Public Groups
   public static var notificationSettingsIncludePublicGroups: String  { return L10n.tr("Localizable", "NotificationSettings.IncludePublicGroups") }
+  /// MESSAGE NOTIFICATIONS
+  public static var notificationSettingsMessageNotifications: String  { return L10n.tr("Localizable", "NotificationSettings.MessageNotifications") }
   /// Message Preview
   public static var notificationSettingsMessagesPreview: String  { return L10n.tr("Localizable", "NotificationSettings.MessagesPreview") }
   /// Notification Tone
   public static var notificationSettingsNotificationTone: String  { return L10n.tr("Localizable", "NotificationSettings.NotificationTone") }
+  /// NOTIFY ME ABOUT...
+  public static var notificationSettingsNotifyMeAbout: String  { return L10n.tr("Localizable", "NotificationSettings.NotifyMeAbout") }
+  /// Off
+  public static var notificationSettingsOff: String  { return L10n.tr("Localizable", "NotificationSettings.Off") }
+  /// On
+  public static var notificationSettingsOn: String  { return L10n.tr("Localizable", "NotificationSettings.On") }
+  /// OPTIONS
+  public static var notificationSettingsOptions: String  { return L10n.tr("Localizable", "NotificationSettings.Options") }
+  /// Private Chats
+  public static var notificationSettingsPrivateChats: String  { return L10n.tr("Localizable", "NotificationSettings.PrivateChats") }
+  /// Reactions
+  public static var notificationSettingsReactions: String  { return L10n.tr("Localizable", "NotificationSettings.Reactions") }
+  /// Reset All Notifications
+  public static var notificationSettingsResetAll: String  { return L10n.tr("Localizable", "NotificationSettings.ResetAll") }
+  /// Undo all custom notification settings for all your contacts, groups and channels.
+  public static var notificationSettingsResetAllInfo: String  { return L10n.tr("Localizable", "NotificationSettings.ResetAllInfo") }
   /// Reset Notifications
   public static var notificationSettingsResetNotifications: String  { return L10n.tr("Localizable", "NotificationSettings.ResetNotifications") }
   /// You can set custom notifications for specific chats below.
@@ -11499,8 +11527,46 @@ public final class L10n {
   public static var notificationSettingsToggleNotifications: String  { return L10n.tr("Localizable", "NotificationSettings.ToggleNotifications") }
   /// Allow in System Settings
   public static var notificationSettingsTurnOn: String  { return L10n.tr("Localizable", "NotificationSettings.TurnOn") }
+  /// Show Notifications
+  public static var notificationSettingsCategoryShowNotifications: String  { return L10n.tr("Localizable", "NotificationSettings.Category.ShowNotifications") }
+  /// Show Sender's Name
+  public static var notificationSettingsCategoryShowSender: String  { return L10n.tr("Localizable", "NotificationSettings.Category.ShowSender") }
+  /// Sound
+  public static var notificationSettingsCategorySound: String  { return L10n.tr("Localizable", "NotificationSettings.Category.Sound") }
   /// Reset notifications
   public static var notificationSettingsConfirmReset: String  { return L10n.tr("Localizable", "NotificationSettings.Confirm.Reset") }
+  /// Add an Exception
+  public static var notificationSettingsExceptionsAdd: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.Add") }
+  /// Always Off
+  public static var notificationSettingsExceptionsAlwaysOff: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.AlwaysOff") }
+  /// Always On
+  public static var notificationSettingsExceptionsAlwaysOn: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.AlwaysOn") }
+  /// Custom Sound
+  public static var notificationSettingsExceptionsCustomSound: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.CustomSound") }
+  /// Delete All Exceptions
+  public static var notificationSettingsExceptionsDeleteAll: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.DeleteAll") }
+  /// Are you sure you want to delete all exceptions?
+  public static var notificationSettingsExceptionsDeleteAllConfirm: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.DeleteAllConfirm") }
+  /// EXCEPTIONS
+  public static var notificationSettingsExceptionsHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.Header") }
+  /// Hide Preview
+  public static var notificationSettingsExceptionsHidePreview: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.HidePreview") }
+  /// Muted until %1$@
+  public static func notificationSettingsExceptionsMutedUntil(_ p1: String) -> String {
+    return L10n.tr("Localizable", "NotificationSettings.Exceptions.MutedUntil", p1)
+  }
+  /// Remove from Exceptions
+  public static var notificationSettingsExceptionsRemove: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.Remove") }
+  /// Show Preview
+  public static var notificationSettingsExceptionsShowPreview: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.ShowPreview") }
+  /// My Contacts
+  public static var notificationSettingsReactionsContacts: String  { return L10n.tr("Localizable", "NotificationSettings.Reactions.Contacts") }
+  /// Everyone
+  public static var notificationSettingsReactionsEveryone: String  { return L10n.tr("Localizable", "NotificationSettings.Reactions.Everyone") }
+  /// From
+  public static var notificationSettingsReactionsFrom: String  { return L10n.tr("Localizable", "NotificationSettings.Reactions.From") }
+  /// Reactions to my Messages
+  public static var notificationSettingsReactionsMessages: String  { return L10n.tr("Localizable", "NotificationSettings.Reactions.Messages") }
   /// Turn this on if you want to receive notifications from all your accounts.
   public static var notificationSettingsShowNotificationsFromOff: String  { return L10n.tr("Localizable", "NotificationSettings.ShowNotificationsFrom.Off") }
   /// Turn this off if you want to receive notifications only from the account you are currently using.
@@ -11509,6 +11575,14 @@ public final class L10n {
   public static var notificationSettingsSnoofOff: String  { return L10n.tr("Localizable", "NotificationSettings.Snoof.Off") }
   /// Turn this off if you want to receive notifications only when application is not in focus.
   public static var notificationSettingsSnoofOn: String  { return L10n.tr("Localizable", "NotificationSettings.Snoof.On") }
+  /// Default Sound
+  public static var notificationSettingsThisDeviceDefaultSound: String  { return L10n.tr("Localizable", "NotificationSettings.ThisDevice.DefaultSound") }
+  /// ON THIS DEVICE
+  public static var notificationSettingsThisDeviceHeader: String  { return L10n.tr("Localizable", "NotificationSettings.ThisDevice.Header") }
+  /// These settings apply only to this device. Turning off 'Notifications' or 'Show Message Text' here overrides all the settings above. 'Default Sound' is used wherever a sound above is set to 'Default'; choosing 'None' silences every notification sound on this device.
+  public static var notificationSettingsThisDeviceInfo: String  { return L10n.tr("Localizable", "NotificationSettings.ThisDevice.Info") }
+  /// Show Message Text
+  public static var notificationSettingsThisDeviceShowMessageText: String  { return L10n.tr("Localizable", "NotificationSettings.ThisDevice.ShowMessageText") }
   /// NOTIFICATIONS
   public static var notificationSettingsToggleNotificationsHeader: String  { return L10n.tr("Localizable", "NotificationSettings.ToggleNotifications.Header") }
   /// Default
