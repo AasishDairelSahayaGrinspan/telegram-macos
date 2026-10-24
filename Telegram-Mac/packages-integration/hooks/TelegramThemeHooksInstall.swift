@@ -782,6 +782,7 @@ private func themeHookImage(_ image: TelegramThemeImage) -> NSImage {
             case .iconSettingsNotifyGroupChats: return NSImage(resource: .iconSettingsNotifyGroupChats)
             case .iconSettingsNotifyPrivateChats: return NSImage(resource: .iconSettingsNotifyPrivateChats)
             case .iconSettingsNotifyReactions: return NSImage(resource: .iconSettingsNotifyReactions)
+            case .iconSettingsNotifyStories: return NSImage(resource: .iconSettingsNotifyStories)
             case .iconSettingsProfile: return NSImage(resource: .iconSettingsProfile)
             case .iconSettingsProxy: return NSImage(resource: .iconSettingsProxy)
             case .iconSettingsSecurity: return NSImage(resource: .iconSettingsSecurity)

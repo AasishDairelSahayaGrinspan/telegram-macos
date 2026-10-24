@@ -47,6 +47,7 @@ private struct State : Equatable {
     var defaultSound: PeerMessageSound = .default
     var soundList: NotificationSoundList?
     var canRemove: Bool = false
+    var isStories: Bool = false
     var maxSavedCount: Int = 0
     var loaded: Bool = false
 
@@ -107,7 +108,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
         sectionId += 1
     }
 
-    entries.append(.desc(sectionId: sectionId, index: index, text: .plain(strings().notificationSettingsExceptionNotificationsHeader), data: .init(color: theme.colors.listGrayText, viewType: .textTopItem)))
+    entries.append(.desc(sectionId: sectionId, index: index, text: .plain(state.isStories ? strings().notificationSettingsExceptionStoriesHeader : strings().notificationSettingsExceptionNotificationsHeader), data: .init(color: theme.colors.listGrayText, viewType: .textTopItem)))
     index += 1
 
     entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_always_on, data: .init(name: strings().notificationSettingsExceptionsAlwaysOn, color: theme.colors.text, type: .selectable(state.effectiveMute == .alwaysOn), viewType: .firstItem, action: {
@@ -124,7 +125,7 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
     sectionId += 1
 
     if state.effectiveMute != .alwaysOff {
-        entries.append(.desc(sectionId: sectionId, index: index, text: .plain(strings().notificationSettingsExceptionPreviewHeader), data: .init(color: theme.colors.listGrayText, viewType: .textTopItem)))
+        entries.append(.desc(sectionId: sectionId, index: index, text: .plain(state.isStories ? strings().notificationSettingsExceptionAuthorNameHeader : strings().notificationSettingsExceptionPreviewHeader), data: .init(color: theme.colors.listGrayText, viewType: .textTopItem)))
         index += 1
 
         entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_preview_on, data: .init(name: strings().notificationSettingsExceptionsAlwaysOn, color: theme.colors.text, type: .selectable(state.effectivePreviews), viewType: .firstItem, action: {
@@ -139,6 +140,10 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
 
         entries.append(.sectionId(sectionId, type: .normal))
         sectionId += 1
+    }
+
+    if state.isStories && state.effectiveMute == .alwaysOff {
+        return entries
     }
 
     let selected = state.selectedSound
@@ -203,7 +208,9 @@ private func entries(_ state: State, arguments: Arguments) -> [InputDataEntry] {
     return entries
 }
 
-func NotificationExceptionSettingsModalController(context: any AccountContextProtocol, peer: EnginePeer, category: NotificationSettingsCategory, exceptionsContext: NotificationExceptionsContext, isNew: Bool) -> InputDataModalController {
+func NotificationExceptionSettingsModalController(context: any AccountContextProtocol, peer: EnginePeer, category: NotificationSettingsCategory, exceptionsContext: NotificationExceptionsContext, isNew: Bool, isAutomatic: Bool = false) -> InputDataModalController {
+
+    let isStories = category == .stories
 
     let peerId = peer.id
 
@@ -245,8 +252,7 @@ func NotificationExceptionSettingsModalController(context: any AccountContextPro
     }, removeCloudSound: { file in
         _ = showModalProgress(signal: context.engine.peers.removeNotificationSound(file: .standalone(media: file)), for: context.window).start()
     }, remove: {
-        exceptionsContext.remove([peerId])
-        _ = context.engine.peers.removeCustomNotificationSettings(peerIds: [peerId]).start()
+        removeNotificationExceptions(context: context, category: category, peerIds: [peerId])
         close?()
     })
 
@@ -259,38 +265,78 @@ func NotificationExceptionSettingsModalController(context: any AccountContextPro
         let categorySettings = category.messageSettings(globalSettings)
         let now = Int32(Date().timeIntervalSince1970)
         let currentMute: ExceptionMute
-        switch settings.muteState {
-        case .unmuted:
-            currentMute = .alwaysOn
-        case let .muted(until):
-            currentMute = until > now ? .alwaysOff : .alwaysOn
-        case .default:
-            currentMute = categorySettings.enabled ? .alwaysOn : .alwaysOff
-        }
         let currentPreviews: Bool
-        switch settings.displayPreviews {
-        case .show:
-            currentPreviews = true
-        case .hide:
-            currentPreviews = false
-        case .default:
-            currentPreviews = categorySettings.displayPreviews
+        let currentSound: PeerMessageSound
+        let categorySound: PeerMessageSound
+        let isDefaultMute: Bool
+        if isStories {
+            let storySettings = categorySettings.storySettings
+            switch settings.storySettings.mute {
+            case .unmuted:
+                currentMute = .alwaysOn
+            case .muted:
+                currentMute = .alwaysOff
+            case .default:
+                switch storySettings.mute {
+                case .unmuted:
+                    currentMute = .alwaysOn
+                case .muted:
+                    currentMute = .alwaysOff
+                case .default:
+                    currentMute = isAutomatic ? .alwaysOn : .alwaysOff
+                }
+            }
+            switch settings.storySettings.hideSender {
+            case .show:
+                currentPreviews = true
+            case .hide:
+                currentPreviews = false
+            case .default:
+                currentPreviews = storySettings.hideSender != .hide
+            }
+            currentSound = settings.storySettings.sound
+            categorySound = effectiveCategorySound(storySettings.sound)
+            isDefaultMute = settings.storySettings.mute == .default
+        } else {
+            switch settings.muteState {
+            case .unmuted:
+                currentMute = .alwaysOn
+            case let .muted(until):
+                currentMute = until > now ? .alwaysOff : .alwaysOn
+            case .default:
+                currentMute = categorySettings.enabled ? .alwaysOn : .alwaysOff
+            }
+            switch settings.displayPreviews {
+            case .show:
+                currentPreviews = true
+            case .hide:
+                currentPreviews = false
+            case .default:
+                currentPreviews = categorySettings.displayPreviews
+            }
+            currentSound = settings.messageSound
+            categorySound = effectiveCategorySound(categorySettings.sound)
+            if case .default = settings.muteState {
+                isDefaultMute = true
+            } else {
+                isDefaultMute = false
+            }
         }
-        let categorySound = effectiveCategorySound(categorySettings.sound)
         updateState { current in
             var current = current
             if !current.loaded {
                 current.currentMute = currentMute
                 current.currentPreviews = currentPreviews
-                current.currentSound = settings.messageSound
-                if isNew, case .default = settings.muteState {
-                    current.mute = categorySettings.enabled ? .alwaysOff : .alwaysOn
+                current.currentSound = currentSound
+                if isNew, isDefaultMute {
+                    current.mute = currentMute == .alwaysOn ? .alwaysOff : .alwaysOn
                 }
             }
             current.defaultSound = categorySound == .default ? inAppSettings.tone : categorySound
             current.soundList = soundList
             current.maxSavedCount = NotificationSoundSettings.extract(from: context.appConfiguration).maxSavedCount
-            current.canRemove = !isNew
+            current.canRemove = !isNew && !isAutomatic
+            current.isStories = isStories
             current.loaded = true
             return current
         }
@@ -308,14 +354,26 @@ func NotificationExceptionSettingsModalController(context: any AccountContextPro
 
     let apply:() -> Void = {
         let state = stateValue.with { $0 }
-        if let mute = state.mute {
-            _ = context.engine.peers.updatePeerMuteSetting(peerId: peerId, threadId: nil, muteInterval: mute == .alwaysOn ? 0 : Int32.max).start()
-        }
-        if let previews = state.previews {
-            _ = context.engine.peers.updatePeerDisplayPreviewsSetting(peerId: peerId, threadId: nil, displayPreviews: previews ? .show : .hide).start()
-        }
-        if let sound = state.sound {
-            _ = context.engine.peers.updatePeerNotificationSoundInteractive(peerId: peerId, threadId: nil, sound: sound).start()
+        if isStories {
+            if let mute = state.mute {
+                _ = context.engine.peers.updatePeerStoriesMutedSetting(peerId: peerId, mute: mute == .alwaysOn ? .unmuted : .muted).start()
+            }
+            if let previews = state.previews {
+                _ = context.engine.peers.updatePeerStoriesHideSenderSetting(peerId: peerId, hideSender: previews ? .show : .hide).start()
+            }
+            if let sound = state.sound {
+                _ = context.engine.peers.updatePeerStorySoundInteractive(peerId: peerId, sound: sound).start()
+            }
+        } else {
+            if let mute = state.mute {
+                _ = context.engine.peers.updatePeerMuteSetting(peerId: peerId, threadId: nil, muteInterval: mute == .alwaysOn ? 0 : Int32.max).start()
+            }
+            if let previews = state.previews {
+                _ = context.engine.peers.updatePeerDisplayPreviewsSetting(peerId: peerId, threadId: nil, displayPreviews: previews ? .show : .hide).start()
+            }
+            if let sound = state.sound {
+                _ = context.engine.peers.updatePeerNotificationSoundInteractive(peerId: peerId, threadId: nil, sound: sound).start()
+            }
         }
         if state.mute != nil || state.previews != nil || state.sound != nil {
             exceptionsContext.add(peerId)

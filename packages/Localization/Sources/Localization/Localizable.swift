@@ -11709,6 +11709,10 @@ public final class L10n {
   public static func notificationStarsGiftUpgradeChannel(_ p1: String) -> String {
     return L10n.tr("Localizable", "Notification.StarsGift.Upgrade.Channel", p1)
   }
+  /// New story was posted
+  public static var notificationStoryHidden: String  { return L10n.tr("Localizable", "Notification.Story.Hidden") }
+  /// posted a story
+  public static var notificationStoryPosted: String  { return L10n.tr("Localizable", "Notification.Story.Posted") }
   /// Reply
   public static var notificationTitleReply: String  { return L10n.tr("Localizable", "Notification.Title.Reply") }
   /// All Accounts
@@ -11779,8 +11783,12 @@ public final class L10n {
   public static var notificationSettingsSnoofHeader: String  { return L10n.tr("Localizable", "NotificationSettings.SnoofHeader") }
   /// SOUND EFFECTS
   public static var notificationSettingsSoundEffects: String  { return L10n.tr("Localizable", "NotificationSettings.SoundEffects") }
+  /// Stories
+  public static var notificationSettingsStories: String  { return L10n.tr("Localizable", "NotificationSettings.Stories") }
   /// Notifications
   public static var notificationSettingsToggleNotifications: String  { return L10n.tr("Localizable", "NotificationSettings.ToggleNotifications") }
+  /// Top 5
+  public static var notificationSettingsTopChats: String  { return L10n.tr("Localizable", "NotificationSettings.TopChats") }
   /// Allow in System Settings
   public static var notificationSettingsTurnOn: String  { return L10n.tr("Localizable", "NotificationSettings.TurnOn") }
   /// Show Notifications
@@ -11793,18 +11801,26 @@ public final class L10n {
   public static var notificationSettingsConfirmReset: String  { return L10n.tr("Localizable", "NotificationSettings.Confirm.Reset") }
   /// ALERT TONES
   public static var notificationSettingsExceptionAlertTonesHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.AlertTonesHeader") }
+  /// DISPLAY AUTHOR NAME
+  public static var notificationSettingsExceptionAuthorNameHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.AuthorNameHeader") }
   /// CLASSIC
   public static var notificationSettingsExceptionClassicTonesHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.ClassicTonesHeader") }
   /// NOTIFICATIONS
   public static var notificationSettingsExceptionNotificationsHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.NotificationsHeader") }
   /// MESSAGE PREVIEW
   public static var notificationSettingsExceptionPreviewHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.PreviewHeader") }
+  /// STORY NOTIFICATIONS
+  public static var notificationSettingsExceptionStoriesHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.StoriesHeader") }
   /// Add an Exception
   public static var notificationSettingsExceptionsAdd: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.Add") }
   /// Always Off
   public static var notificationSettingsExceptionsAlwaysOff: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.AlwaysOff") }
   /// Always On
   public static var notificationSettingsExceptionsAlwaysOn: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.AlwaysOn") }
+  /// %1$@ (automatic)
+  public static func notificationSettingsExceptionsAutomatic(_ p1: String) -> String {
+    return L10n.tr("Localizable", "NotificationSettings.Exceptions.Automatic", p1)
+  }
   /// Custom Sound
   public static var notificationSettingsExceptionsCustomSound: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.CustomSound") }
   /// Delete All Exceptions
@@ -11813,6 +11829,8 @@ public final class L10n {
   public static var notificationSettingsExceptionsDeleteAllConfirm: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.DeleteAllConfirm") }
   /// EXCEPTIONS
   public static var notificationSettingsExceptionsHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.Header") }
+  /// Hide Name
+  public static var notificationSettingsExceptionsHideName: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.HideName") }
   /// Hide Preview
   public static var notificationSettingsExceptionsHidePreview: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.HidePreview") }
   /// Muted until %1$@
@@ -11821,6 +11839,8 @@ public final class L10n {
   }
   /// Remove from Exceptions
   public static var notificationSettingsExceptionsRemove: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.Remove") }
+  /// Show Name
+  public static var notificationSettingsExceptionsShowName: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.ShowName") }
   /// Show Preview
   public static var notificationSettingsExceptionsShowPreview: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.ShowPreview") }
   /// My Contacts
@@ -11839,6 +11859,12 @@ public final class L10n {
   public static var notificationSettingsSnoofOff: String  { return L10n.tr("Localizable", "NotificationSettings.Snoof.Off") }
   /// Turn this off if you want to receive notifications only when application is not in focus.
   public static var notificationSettingsSnoofOn: String  { return L10n.tr("Localizable", "NotificationSettings.Snoof.On") }
+  /// Important Stories
+  public static var notificationSettingsStoriesImportant: String  { return L10n.tr("Localizable", "NotificationSettings.Stories.Important") }
+  /// Always on for top 5 contacts.
+  public static var notificationSettingsStoriesImportantInfo: String  { return L10n.tr("Localizable", "NotificationSettings.Stories.ImportantInfo") }
+  /// New Stories
+  public static var notificationSettingsStoriesNew: String  { return L10n.tr("Localizable", "NotificationSettings.Stories.New") }
   /// Default Sound
   public static var notificationSettingsThisDeviceDefaultSound: String  { return L10n.tr("Localizable", "NotificationSettings.ThisDevice.DefaultSound") }
   /// ON THIS DEVICE

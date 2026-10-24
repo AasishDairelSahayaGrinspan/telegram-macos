@@ -255,7 +255,13 @@ private func notificationSearchableItems<Context: AccountContextProtocol>(contex
     
     let categoryItems: (NotificationSettingsCategory, Int32) -> [SettingsSearchableItem<Context>] = { category, base in
         let breadcrumbs = [strings().accountSettingsNotifications, category.title]
-        let rows: [(String, NotificationCategoryEntryTag)] = [(strings().notificationSettingsCategoryShowNotifications, .show), (strings().notificationSettingsMessagesPreview, .preview), (strings().notificationSettingsCategorySound, .sound), (strings().notificationSettingsExceptionsAdd, .addException), (strings().notificationSettingsExceptionsDeleteAll, .deleteExceptions)]
+        var rows: [(String, NotificationCategoryEntryTag)]
+        if case .stories = category {
+            rows = [(strings().notificationSettingsStoriesNew, .show), (strings().notificationSettingsStoriesImportant, .important), (strings().notificationSettingsCategoryShowSender, .preview)]
+        } else {
+            rows = [(strings().notificationSettingsCategoryShowNotifications, .show), (strings().notificationSettingsMessagesPreview, .preview)]
+        }
+        rows += [(strings().notificationSettingsCategorySound, .sound), (strings().notificationSettingsExceptionsAdd, .addException), (strings().notificationSettingsExceptionsDeleteAll, .deleteExceptions)]
         var items: [SettingsSearchableItem<Context>] = [SettingsSearchableItem(id: .notifications(base), title: category.title, alternate: [], icon: icon, breadcrumbs: [strings().accountSettingsNotifications, strings().notificationSettingsMessageNotifications], present: { context, _, present in
             presentCategory(category, nil, present, context)
         })]
@@ -277,7 +283,7 @@ private func notificationSearchableItems<Context: AccountContextProtocol>(contex
         }))
     }
     
-    let categorySearchItems = categoryItems(.privateChats, 30) + categoryItems(.groupChats, 40) + categoryItems(.channels, 50) + reactionItems
+    let categorySearchItems = categoryItems(.privateChats, 30) + categoryItems(.groupChats, 40) + categoryItems(.channels, 50) + categoryItems(.stories, 60) + reactionItems
     
     return categorySearchItems + [
         SettingsSearchableItem(id: .notifications(0), title: strings().accountSettingsNotifications, alternate: synonyms(strings().settingsSearchSynonymsNotificationsTitle), icon: icon, breadcrumbs: [], present: { context, _, present in

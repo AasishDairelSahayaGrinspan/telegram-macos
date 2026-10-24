@@ -21,12 +21,14 @@ import AlertsUI
 private let privateChatsIcon = generateSettingsIcon(TelegramThemeHooks.shared.image(.iconSettingsNotifyPrivateChats).precomposed(flipVertical: true))
 private let groupChatsIcon = generateSettingsIcon(TelegramThemeHooks.shared.image(.iconSettingsNotifyGroupChats).precomposed(flipVertical: true))
 private let channelsIcon = generateSettingsIcon(TelegramThemeHooks.shared.image(.iconSettingsNotifyChannels).precomposed(flipVertical: true))
+private let storiesIcon = generateSettingsIcon(TelegramThemeHooks.shared.image(.iconSettingsNotifyStories).precomposed(flipVertical: true))
 let reactionsNotificationIcon = generateSettingsIcon(TelegramThemeHooks.shared.image(.iconSettingsNotifyReactions).precomposed(flipVertical: true))
 
 public enum NotificationSettingsCategory: Equatable {
     case privateChats
     case groupChats
     case channels
+    case stories
 
     var title: String {
         switch self {
@@ -36,6 +38,8 @@ public enum NotificationSettingsCategory: Equatable {
             return strings().notificationSettingsGroupChats
         case .channels:
             return strings().notificationSettingsChannels
+        case .stories:
+            return strings().notificationSettingsStories
         }
     }
 
@@ -47,6 +51,8 @@ public enum NotificationSettingsCategory: Equatable {
             return groupChatsIcon
         case .channels:
             return channelsIcon
+        case .stories:
+            return storiesIcon
         }
     }
 
@@ -58,12 +64,14 @@ public enum NotificationSettingsCategory: Equatable {
             return [.groups, .remote]
         case .channels:
             return [.channels, .remote]
+        case .stories:
+            return [.contacts, .remote]
         }
     }
 
     func messageSettings(_ settings: GlobalNotificationSettingsSet) -> MessageNotificationSettings {
         switch self {
-        case .privateChats:
+        case .privateChats, .stories:
             return settings.privateChats
         case .groupChats:
             return settings.groupChats
@@ -74,7 +82,7 @@ public enum NotificationSettingsCategory: Equatable {
 
     func updateMessageSettings(_ settings: inout GlobalNotificationSettingsSet, _ f: (inout MessageNotificationSettings) -> Void) {
         switch self {
-        case .privateChats:
+        case .privateChats, .stories:
             f(&settings.privateChats)
         case .groupChats:
             f(&settings.groupChats)
@@ -84,6 +92,12 @@ public enum NotificationSettingsCategory: Equatable {
     }
 
     func contains(_ peer: EnginePeer) -> Bool {
+        if case .stories = self {
+            if case .community = peer {
+                return false
+            }
+            return true
+        }
         switch peer {
         case .user, .secretChat:
             return self == .privateChats
@@ -108,6 +122,14 @@ func effectiveCategorySound(_ sound: PeerMessageSound) -> PeerMessageSound {
     return sound
 }
 
+func removeNotificationExceptions(context: any AccountContextProtocol, category: NotificationSettingsCategory, peerIds: [PeerId]) {
+    if case .stories = category {
+        _ = context.engine.peers.removeCustomStoryNotificationSettings(peerIds: peerIds).start()
+    } else {
+        _ = context.engine.peers.removeCustomNotificationSettings(peerIds: peerIds).start()
+    }
+}
+
 public struct NotificationException: Equatable {
     public let peer: EnginePeer
     public let settings: TelegramPeerNotificationSettings
@@ -126,6 +148,10 @@ public struct NotificationException: Equatable {
     func hasCustomSettings(for category: NotificationSettingsCategory) -> Bool {
         guard category.contains(peer) else {
             return false
+        }
+        if case .stories = category {
+            let story = settings.storySettings
+            return story.mute != .default || story.hideSender != .default
         }
         if case .default = settings.muteState {
             return settings.messageSound != .default
@@ -237,15 +263,17 @@ public final class NotificationExceptionsContext {
 private final class Arguments {
     let context: any AccountContextProtocol
     let toggleEnabled:()->Void
+    let toggleImportant:()->Void
     let togglePreviews:()->Void
     let openSound:()->Void
     let addException:()->Void
     let deleteAll:()->Void
-    let editException:(EnginePeer)->Void
-    let exceptionMenu:(NotificationException)->[ContextMenuItem]
-    init(context: any AccountContextProtocol, toggleEnabled:@escaping()->Void, togglePreviews:@escaping()->Void, openSound:@escaping()->Void, addException:@escaping()->Void, deleteAll:@escaping()->Void, editException:@escaping(EnginePeer)->Void, exceptionMenu:@escaping(NotificationException)->[ContextMenuItem]) {
+    let editException:(EnginePeer, Bool)->Void
+    let exceptionMenu:(NotificationException, Bool)->[ContextMenuItem]
+    init(context: any AccountContextProtocol, toggleEnabled:@escaping()->Void, toggleImportant:@escaping()->Void, togglePreviews:@escaping()->Void, openSound:@escaping()->Void, addException:@escaping()->Void, deleteAll:@escaping()->Void, editException:@escaping(EnginePeer, Bool)->Void, exceptionMenu:@escaping(NotificationException, Bool)->[ContextMenuItem]) {
         self.context = context
         self.toggleEnabled = toggleEnabled
+        self.toggleImportant = toggleImportant
         self.togglePreviews = togglePreviews
         self.openSound = openSound
         self.addException = addException
@@ -260,11 +288,13 @@ private struct State : Equatable {
     var inAppTone: PeerMessageSound = .default
     var soundList: NotificationSoundList?
     var exceptions: [NotificationException] = []
+    var automaticPeers: [EnginePeer] = []
     var loaded: Bool = false
     var settingsLoaded: Bool = false
 }
 
 private let _id_enabled = InputDataIdentifier("_id_enabled")
+private let _id_important = InputDataIdentifier("_id_important")
 private let _id_previews = InputDataIdentifier("_id_previews")
 private let _id_sound = InputDataIdentifier("_id_sound")
 private let _id_add_exception = InputDataIdentifier("_id_add_exception")
@@ -276,6 +306,7 @@ private func _id_exception(_ peerId: PeerId) -> InputDataIdentifier {
 
 public enum NotificationCategoryEntryTag: ItemListItemTag {
     case show
+    case important
     case preview
     case sound
     case addException
@@ -285,6 +316,8 @@ public enum NotificationCategoryEntryTag: ItemListItemTag {
         switch self {
         case .show:
             return .general(_id_enabled)
+        case .important:
+            return .general(_id_important)
         case .preview:
             return .general(_id_previews)
         case .sound:
@@ -305,9 +338,28 @@ public enum NotificationCategoryEntryTag: ItemListItemTag {
     }
 }
 
-private func exceptionStatus(_ exception: NotificationException, now: Int32) -> String {
+private func exceptionStatus(_ exception: NotificationException, category: NotificationSettingsCategory, now: Int32) -> String {
     var components: [String] = []
     let settings = exception.settings
+    if case .stories = category {
+        switch settings.storySettings.mute {
+        case .muted:
+            return strings().notificationSettingsExceptionsAlwaysOff
+        case .unmuted:
+            components.append(strings().notificationSettingsExceptionsAlwaysOn)
+        case .default:
+            break
+        }
+        switch settings.storySettings.hideSender {
+        case .show:
+            components.append(strings().notificationSettingsExceptionsShowName)
+        case .hide:
+            components.append(strings().notificationSettingsExceptionsHideName)
+        case .default:
+            break
+        }
+        return components.joined(separator: ", ")
+    }
     switch settings.muteState {
     case .unmuted:
         components.append(strings().notificationSettingsExceptionsAlwaysOn)
@@ -339,6 +391,7 @@ private func exceptionStatus(_ exception: NotificationException, now: Int32) -> 
 private struct ExceptionRow : Equatable {
     let exception: NotificationException
     let status: String
+    let isAutomatic: Bool
     let viewType: GeneralViewType
 }
 
@@ -352,21 +405,56 @@ private func entries(_ state: State, category: NotificationSettingsCategory, arg
     sectionId += 1
 
     let messageSettings = category.messageSettings(state.settings)
+    let notificationsEnabled: Bool
 
-    entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_enabled, data: .init(name: strings().notificationSettingsCategoryShowNotifications, color: theme.colors.text, type: .switchable(messageSettings.enabled), viewType: .singleItem, action: arguments.toggleEnabled)))
-    index += 1
+    if case .stories = category {
+        let mute = messageSettings.storySettings.mute
+        let allEnabled = mute == .unmuted
+        notificationsEnabled = mute != .muted
+
+        entries.append(.desc(sectionId: sectionId, index: index, text: .plain(strings().notificationSettingsNotifyMeAbout), data: .init(color: theme.colors.listGrayText, viewType: .textTopItem)))
+        index += 1
+
+        entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_enabled, data: .init(name: strings().notificationSettingsStoriesNew, color: theme.colors.text, type: .switchable(allEnabled), viewType: allEnabled ? .singleItem : .firstItem, action: arguments.toggleEnabled)))
+        index += 1
+
+        if !allEnabled {
+            entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_important, data: .init(name: strings().notificationSettingsStoriesImportant, color: theme.colors.text, type: .switchable(mute == .default), viewType: .lastItem, action: arguments.toggleImportant)))
+            index += 1
+
+            entries.append(.desc(sectionId: sectionId, index: index, text: .plain(strings().notificationSettingsStoriesImportantInfo), data: .init(color: theme.colors.listGrayText, viewType: .textBottomItem)))
+            index += 1
+        }
+    } else {
+        notificationsEnabled = messageSettings.enabled
+        entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_enabled, data: .init(name: strings().notificationSettingsCategoryShowNotifications, color: theme.colors.text, type: .switchable(messageSettings.enabled), viewType: .singleItem, action: arguments.toggleEnabled)))
+        index += 1
+    }
 
     entries.append(.sectionId(sectionId, type: .normal))
     sectionId += 1
 
-    if messageSettings.enabled || !state.exceptions.isEmpty {
+    if notificationsEnabled || !state.exceptions.isEmpty {
         entries.append(.desc(sectionId: sectionId, index: index, text: .plain(strings().notificationSettingsOptions), data: .init(color: theme.colors.listGrayText, viewType: .textTopItem)))
         index += 1
 
-        entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_previews, data: .init(name: strings().notificationSettingsMessagesPreview, color: theme.colors.text, type: .switchable(messageSettings.displayPreviews), viewType: .firstItem, action: arguments.togglePreviews)))
+        let previews: Bool
+        let previewsTitle: String
+        let sound: PeerMessageSound
+        if case .stories = category {
+            previews = messageSettings.storySettings.hideSender != .hide
+            previewsTitle = strings().notificationSettingsCategoryShowSender
+            sound = effectiveCategorySound(messageSettings.storySettings.sound)
+        } else {
+            previews = messageSettings.displayPreviews
+            previewsTitle = strings().notificationSettingsMessagesPreview
+            sound = effectiveCategorySound(messageSettings.sound)
+        }
+
+        entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_previews, data: .init(name: previewsTitle, color: theme.colors.text, type: .switchable(previews), viewType: .firstItem, action: arguments.togglePreviews)))
         index += 1
 
-        entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_sound, data: .init(name: strings().notificationSettingsCategorySound, color: theme.colors.text, type: .nextContext(localizedPeerNotificationSoundString(sound: effectiveCategorySound(messageSettings.sound), default: state.inAppTone, list: state.soundList?.sounds)), viewType: .lastItem, action: arguments.openSound)))
+        entries.append(.general(sectionId: sectionId, index: index, value: .none, error: nil, identifier: _id_sound, data: .init(name: strings().notificationSettingsCategorySound, color: theme.colors.text, type: .nextContext(localizedPeerNotificationSoundString(sound: sound, default: state.inAppTone, list: state.soundList?.sounds)), viewType: .lastItem, action: arguments.openSound)))
         index += 1
 
         entries.append(.sectionId(sectionId, type: .normal))
@@ -376,9 +464,15 @@ private func entries(_ state: State, category: NotificationSettingsCategory, arg
     entries.append(.desc(sectionId: sectionId, index: index, text: .plain(strings().notificationSettingsExceptionsHeader), data: .init(color: theme.colors.listGrayText, viewType: .textTopItem)))
     index += 1
 
-    let isLoading = !state.loaded && state.exceptions.isEmpty
+    var rows: [(NotificationException, Bool)] = state.exceptions.map { ($0, false) }
+    if case .stories = category, messageSettings.storySettings.mute == .default {
+        for peer in state.automaticPeers where !state.exceptions.contains(where: { $0.peer.id == peer.id }) {
+            rows.append((NotificationException(peer: peer, settings: .defaultSettings), true))
+        }
+    }
+    let isLoading = !state.loaded && rows.isEmpty
 
-    let addViewType: GeneralViewType = state.exceptions.isEmpty && !isLoading ? .singleItem : .firstItem
+    let addViewType: GeneralViewType = rows.isEmpty && !isLoading ? .singleItem : .firstItem
     entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_add_exception, equatable: .init(addViewType), comparable: nil, item: { initialSize, stableId in
         return GeneralInteractedRowItem(initialSize, stableId: stableId, name: strings().notificationSettingsExceptionsAdd, nameStyle: blueActionButton, type: .none, viewType: addViewType, action: arguments.addException, thumb: GeneralThumbAdditional(thumb: theme.icons.peerInfoAddMember, textInset: 52, thumbInset: 5))
     }))
@@ -392,14 +486,15 @@ private func entries(_ state: State, category: NotificationSettingsCategory, arg
     }
 
     let now = Int32(Date().timeIntervalSince1970)
-    for (i, exception) in state.exceptions.enumerated() {
-        let viewType: GeneralViewType = i == state.exceptions.count - 1 ? .lastItem : .innerItem
-        let tuple = ExceptionRow(exception: exception, status: exceptionStatus(exception, now: now), viewType: viewType)
+    for (i, (exception, isAutomatic)) in rows.enumerated() {
+        let viewType: GeneralViewType = i == rows.count - 1 ? .lastItem : .innerItem
+        let status = isAutomatic ? strings().notificationSettingsExceptionsAutomatic(strings().notificationSettingsExceptionsAlwaysOn) : exceptionStatus(exception, category: category, now: now)
+        let tuple = ExceptionRow(exception: exception, status: status, isAutomatic: isAutomatic, viewType: viewType)
         entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_exception(exception.peer.id), equatable: .init(tuple), comparable: nil, item: { initialSize, stableId in
             return ShortPeerRowItem(initialSize, peer: tuple.exception.peer._asPeer(), account: arguments.context.account, context: arguments.context, stableId: stableId, height: 46, photoSize: NSMakeSize(32, 32), status: tuple.status.isEmpty ? nil : tuple.status, inset: NSEdgeInsets(left: 20, right: 20), viewType: tuple.viewType, action: {
-                arguments.editException(tuple.exception.peer)
+                arguments.editException(tuple.exception.peer, tuple.isAutomatic)
             }, contextMenuItems: {
-                return .single(arguments.exceptionMenu(tuple.exception))
+                return .single(arguments.exceptionMenu(tuple.exception, tuple.isAutomatic))
             })
         }))
         index += 1
@@ -444,30 +539,53 @@ public func NotificationCategorySettingsController(context: any AccountContextPr
     let peerSound:(PeerId) -> Signal<PeerMessageSound, NoError> = { peerId in
         let key: PostboxViewKey = .peerNotificationSettings(peerIds: Set([peerId]))
         return context.account.postbox.combinedView(keys: [key]) |> map { view in
-            return (((view.views[key] as? PeerNotificationSettingsView)?.notificationSettings[peerId] as? TelegramPeerNotificationSettings) ?? .defaultSettings).messageSound
+            let settings = ((view.views[key] as? PeerNotificationSettingsView)?.notificationSettings[peerId] as? TelegramPeerNotificationSettings) ?? .defaultSettings
+            if case .stories = category {
+                return settings.storySettings.sound
+            }
+            return settings.messageSound
         }
     }
 
     let removeExceptions:([PeerId]) -> Void = { peerIds in
-        exceptionsContext.remove(peerIds)
-        _ = context.engine.peers.removeCustomNotificationSettings(peerIds: peerIds).start()
+        removeNotificationExceptions(context: context, category: category, peerIds: peerIds)
     }
 
     let arguments = Arguments(context: context, toggleEnabled: {
         updateSettings { settings in
-            settings.enabled = !settings.enabled
+            if case .stories = category {
+                settings.storySettings.mute = settings.storySettings.mute == .unmuted ? .default : .unmuted
+            } else {
+                settings.enabled = !settings.enabled
+            }
+        }
+    }, toggleImportant: {
+        updateSettings { settings in
+            settings.storySettings.mute = settings.storySettings.mute == .muted ? .default : .muted
         }
     }, togglePreviews: {
         updateSettings { settings in
-            settings.displayPreviews = !settings.displayPreviews
+            if case .stories = category {
+                settings.storySettings.hideSender = settings.storySettings.hideSender == .hide ? .show : .hide
+            } else {
+                settings.displayPreviews = !settings.displayPreviews
+            }
         }
     }, openSound: {
         let tone: Signal<PeerMessageSound, NoError> = globalNotificationSettings(postbox: context.account.postbox) |> map { settings in
-            return effectiveCategorySound(category.messageSettings(settings).sound)
+            let messageSettings = category.messageSettings(settings)
+            if case .stories = category {
+                return effectiveCategorySound(messageSettings.storySettings.sound)
+            }
+            return effectiveCategorySound(messageSettings.sound)
         }
         context.bindings.rootNavigation().push(NotificationSoundController(context: context, tone: tone, updateTone: { sound in
             updateSettings { settings in
-                settings.sound = sound
+                if case .stories = category {
+                    settings.storySettings.sound = sound
+                } else {
+                    settings.sound = sound
+                }
             }
         }))
     }, addException: {
@@ -479,7 +597,8 @@ public func NotificationCategorySettingsController(context: any AccountContextPr
             }
             _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId)) |> deliverOnMainQueue).start(next: { peer in
                 if let peer = peer {
-                    showModal(with: NotificationExceptionSettingsModalController(context: context, peer: peer, category: category, exceptionsContext: exceptionsContext, isNew: true), for: context.window)
+                    let isAutomatic = stateValue.with { $0.automaticPeers.contains(where: { $0.id == peerId }) }
+                    showModal(with: NotificationExceptionSettingsModalController(context: context, peer: peer, category: category, exceptionsContext: exceptionsContext, isNew: true, isAutomatic: isAutomatic), for: context.window)
                 }
             })
         })
@@ -487,14 +606,36 @@ public func NotificationCategorySettingsController(context: any AccountContextPr
         verifyAlert_button(for: context.window, information: strings().notificationSettingsExceptionsDeleteAllConfirm, ok: strings().notificationSettingsExceptionsDeleteAll, successHandler: { _ in
             removeExceptions(stateValue.with { $0.exceptions.map { $0.peer.id } })
         })
-    }, editException: { peer in
-        showModal(with: NotificationExceptionSettingsModalController(context: context, peer: peer, category: category, exceptionsContext: exceptionsContext, isNew: false), for: context.window)
-    }, exceptionMenu: { exception in
+    }, editException: { peer, isAutomatic in
+        showModal(with: NotificationExceptionSettingsModalController(context: context, peer: peer, category: category, exceptionsContext: exceptionsContext, isNew: false, isAutomatic: isAutomatic), for: context.window)
+    }, exceptionMenu: { exception, isAutomatic in
         let peerId = exception.peer.id
         var items: [ContextMenuItem] = []
 
         let now = Int32(Date().timeIntervalSince1970)
-        if exception.isEffectivelyMuted(now: now) {
+        if case .stories = category {
+            items.append(ContextMenuItem(strings().notificationSettingsExceptionsAlwaysOn, handler: {
+                exceptionsContext.add(peerId)
+                _ = context.engine.peers.updatePeerStoriesMutedSetting(peerId: peerId, mute: .unmuted).start()
+            }, itemImage: exception.settings.storySettings.mute == .unmuted || isAutomatic ? MenuAnimation.menu_check_selected.value : MenuAnimation.menu_unmuted.value))
+            items.append(ContextMenuItem(strings().notificationSettingsExceptionsAlwaysOff, handler: {
+                exceptionsContext.add(peerId)
+                _ = context.engine.peers.updatePeerStoriesMutedSetting(peerId: peerId, mute: .muted).start()
+            }, itemImage: exception.settings.storySettings.mute == .muted ? MenuAnimation.menu_check_selected.value : MenuAnimation.menu_mute.value))
+            let showName: Bool
+            switch exception.settings.storySettings.hideSender {
+            case .show:
+                showName = true
+            case .hide:
+                showName = false
+            case .default:
+                showName = category.messageSettings(stateValue.with { $0.settings }).storySettings.hideSender != .hide
+            }
+            items.append(ContextMenuItem(showName ? strings().notificationSettingsExceptionsHideName : strings().notificationSettingsExceptionsShowName, handler: {
+                exceptionsContext.add(peerId)
+                _ = context.engine.peers.updatePeerStoriesHideSenderSetting(peerId: peerId, hideSender: showName ? .hide : .show).start()
+            }, itemImage: MenuAnimation.menu_eye.value))
+        } else if exception.isEffectivelyMuted(now: now) {
             items.append(ContextMenuItem(strings().chatListContextUnmute, handler: {
                 _ = context.engine.peers.updatePeerMuteSetting(peerId: peerId, threadId: nil, muteInterval: 0).start()
             }, itemImage: MenuAnimation.menu_unmuted.value))
@@ -526,34 +667,55 @@ public func NotificationCategorySettingsController(context: any AccountContextPr
             items.append(mute)
         }
 
-        let showPreview: Bool
-        switch exception.settings.displayPreviews {
-        case .show:
-            showPreview = true
-        case .hide:
-            showPreview = false
-        case .default:
-            showPreview = category.messageSettings(stateValue.with { $0.settings }).displayPreviews
+        if category != .stories {
+            let showPreview: Bool
+            switch exception.settings.displayPreviews {
+            case .show:
+                showPreview = true
+            case .hide:
+                showPreview = false
+            case .default:
+                showPreview = category.messageSettings(stateValue.with { $0.settings }).displayPreviews
+            }
+            items.append(ContextMenuItem(showPreview ? strings().notificationSettingsExceptionsHidePreview : strings().notificationSettingsExceptionsShowPreview, handler: {
+                _ = context.engine.peers.updatePeerDisplayPreviewsSetting(peerId: peerId, threadId: nil, displayPreviews: showPreview ? .hide : .show).start()
+            }, itemImage: MenuAnimation.menu_eye.value))
         }
-        items.append(ContextMenuItem(showPreview ? strings().notificationSettingsExceptionsHidePreview : strings().notificationSettingsExceptionsShowPreview, handler: {
-            _ = context.engine.peers.updatePeerDisplayPreviewsSetting(peerId: peerId, threadId: nil, displayPreviews: showPreview ? .hide : .show).start()
-        }, itemImage: MenuAnimation.menu_eye.value))
 
         items.append(ContextMenuItem(strings().notificationSettingsCategorySound, handler: {
+            exceptionsContext.add(peerId)
             context.bindings.rootNavigation().push(NotificationSoundController(context: context, tone: peerSound(peerId), updateTone: { sound in
-                _ = context.engine.peers.updatePeerNotificationSoundInteractive(peerId: peerId, threadId: nil, sound: sound).start()
+                if case .stories = category {
+                    _ = context.engine.peers.updatePeerStorySoundInteractive(peerId: peerId, sound: sound).start()
+                } else {
+                    _ = context.engine.peers.updatePeerNotificationSoundInteractive(peerId: peerId, threadId: nil, sound: sound).start()
+                }
             }))
         }, itemImage: MenuAnimation.menu_music.value))
 
-        items.append(ContextSeparatorItem())
-        items.append(ContextMenuItem(strings().notificationSettingsExceptionsRemove, handler: {
-            removeExceptions([peerId])
-        }, itemMode: .destruct, itemImage: MenuAnimation.menu_delete.value))
+        if !isAutomatic {
+            items.append(ContextSeparatorItem())
+            items.append(ContextMenuItem(strings().notificationSettingsExceptionsRemove, handler: {
+                removeExceptions([peerId])
+            }, itemMode: .destruct, itemImage: MenuAnimation.menu_delete.value))
+        }
 
         return items
     })
 
-    actionsDisposable.add(combineLatest(queue: .mainQueue(), globalNotificationSettings(postbox: context.account.postbox), appNotificationSettings(accountManager: context.sharedContext.accountManager), context.engine.peers.notificationSoundList(), exceptionsContext.exceptions(for: category), exceptionsContext.loaded).start(next: { settings, inAppSettings, soundList, exceptions, loaded in
+    let automaticPeers: Signal<[EnginePeer], NoError>
+    if case .stories = category {
+        automaticPeers = context.engine.peers.recentPeers() |> map { recentPeers in
+            guard case let .peers(peers) = recentPeers else {
+                return []
+            }
+            return peers.prefix(5).map(EnginePeer.init)
+        }
+    } else {
+        automaticPeers = .single([])
+    }
+
+    actionsDisposable.add(combineLatest(queue: .mainQueue(), globalNotificationSettings(postbox: context.account.postbox), appNotificationSettings(accountManager: context.sharedContext.accountManager), context.engine.peers.notificationSoundList(), exceptionsContext.exceptions(for: category), exceptionsContext.loaded, automaticPeers).start(next: { settings, inAppSettings, soundList, exceptions, loaded, automaticPeers in
         updateState { current in
             var current = current
             current.settings = settings
@@ -561,6 +723,7 @@ public func NotificationCategorySettingsController(context: any AccountContextPr
             current.soundList = soundList
             current.exceptions = exceptions
             current.loaded = loaded
+            current.automaticPeers = automaticPeers
             current.settingsLoaded = true
             return current
         }
