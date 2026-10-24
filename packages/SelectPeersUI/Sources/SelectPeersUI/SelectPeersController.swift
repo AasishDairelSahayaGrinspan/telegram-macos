@@ -1743,6 +1743,12 @@ fileprivate class SelectPeersView : View {
         }
     }
 
+    var bottomInset: CGFloat = 60 {
+        didSet {
+            needsLayout = true
+        }
+    }
+
     public required init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         addSubview(tableView)
@@ -1766,7 +1772,7 @@ fileprivate class SelectPeersView : View {
 
     fileprivate override func layout() {
         super.layout()
-        tableView.frame = NSMakeRect(0, 50, frame.width, frame.height - 110)
+        tableView.frame = NSMakeRect(0, 50, frame.width, frame.height - 50 - bottomInset)
     }
 
     public required init?(coder: NSCoder) {
@@ -1880,6 +1886,7 @@ open class SelectPeersModalController : ModalViewController, Notifable {
         let initialSize = atomicSize
         let account = context.account
         genericView.customTheme = behavior.customTheme
+        genericView.bottomInset = behavior.limit == 1 ? 0 : 60
         
         
         let selectedPeerIds = self.selectedPeerIds
