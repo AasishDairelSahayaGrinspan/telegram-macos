@@ -7,7 +7,7 @@ public protocol TabViewDelegate: AnyObject {
 
 struct FloatingTabBarLayout {
     static let height: CGFloat = 48
-    static let bottomGap: CGFloat = 8
+    static let bottomGap: CGFloat = 16
     static let sideInset: CGFloat = 20
     static let innerInset: CGFloat = 4
 

@@ -69,8 +69,8 @@ final class TabBarViewTreeTests: XCTestCase {
     }
 
     func testCapsuleFloatsInsideItsPaneAndCapsItsWidth() {
-        XCTAssertEqual(FloatingTabBarLayout.frame(in: NSMakeSize(380, 700)), NSMakeRect(20, 644, 340, 48))
-        XCTAssertEqual(FloatingTabBarLayout.frame(in: NSMakeSize(800, 700)), NSMakeRect(150, 644, 500, 48))
+        XCTAssertEqual(FloatingTabBarLayout.frame(in: NSMakeSize(380, 700)), NSMakeRect(20, 636, 340, 48))
+        XCTAssertEqual(FloatingTabBarLayout.frame(in: NSMakeSize(800, 700)), NSMakeRect(150, 636, 500, 48))
         XCTAssertEqual(FloatingTabBarLayout.frame(in: .zero).width, 0)
     }
 
@@ -213,7 +213,7 @@ final class TabBarViewTreeTests: XCTestCase {
         bar.frame = FloatingTabBarLayout.frame(in: parent.frame.size)
         parent.addSubview(bar)
         XCTAssertNil(bar.hitTest(NSMakePoint(10, 670)))
-        XCTAssertNil(bar.hitTest(NSMakePoint(20, 644)))
+        XCTAssertNil(bar.hitTest(NSMakePoint(20, 636)))
         for index in 0 ..< bar.count {
             XCTAssertTrue(bar.hitTest(parent.convert(center(bar, index), from: bar)) === bar.control(for: index))
         }
@@ -255,14 +255,14 @@ final class TabBarViewTreeTests: XCTestCase {
         controller.add(tab: makeTab(controller: child))
         controller.select(index: 0)
         XCTAssertEqual(child.view.frame, controller.bounds)
-        XCTAssertEqual(child.containerContentInsets.bottom, 56)
+        XCTAssertEqual(child.containerContentInsets.bottom, 64)
         controller.updateContainerContentInsets(NSEdgeInsets(top: 0, left: 0, bottom: 12, right: 0), transition: .immediate)
-        XCTAssertEqual(child.containerContentInsets.bottom, 68)
+        XCTAssertEqual(child.containerContentInsets.bottom, 76)
         controller.hideTabView(true)
         XCTAssertEqual(child.view.frame, controller.bounds)
         XCTAssertEqual(child.containerContentInsets.bottom, 12)
         controller.hideTabView(false)
-        XCTAssertEqual(child.containerContentInsets.bottom, 68)
+        XCTAssertEqual(child.containerContentInsets.bottom, 76)
     }
 
     func testAccessibilityPressSelectsOnceAndReportsSelection() {

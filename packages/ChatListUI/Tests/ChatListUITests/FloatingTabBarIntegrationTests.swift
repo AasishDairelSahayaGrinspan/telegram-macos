@@ -18,12 +18,12 @@ final class FloatingTabBarIntegrationTests: XCTestCase {
     func testPeerListsComposeBottomPaddingWithTheirHeaderInsets() {
         let view = PeerListContainerView(frame: NSMakeRect(0, 0, 380, 700))
         view.tableView.contentInsets.top = 30
-        view.contentBottomInset = 56
+        view.contentBottomInset = 64
         XCTAssertEqual(view.tableView.contentInsets.top, 30)
-        XCTAssertEqual(view.tableView.contentInsets.bottom, 56)
-        XCTAssertEqual(view.tableView.scrollerInsets.bottom, 56)
-        view.contentBottomInset = 56
-        XCTAssertEqual(view.tableView.contentInsets.bottom, 56)
+        XCTAssertEqual(view.tableView.contentInsets.bottom, 64)
+        XCTAssertEqual(view.tableView.scrollerInsets.bottom, 64)
+        view.contentBottomInset = 64
+        XCTAssertEqual(view.tableView.contentInsets.bottom, 64)
         view.contentBottomInset = 0
         XCTAssertEqual(view.tableView.contentInsets.top, 30)
         XCTAssertEqual(view.tableView.contentInsets.bottom, 0)
@@ -37,8 +37,8 @@ final class FloatingTabBarIntegrationTests: XCTestCase {
             bottomY = y
             return nil
         }
-        view.contentBottomInset = 56
-        XCTAssertEqual(bottomY, 644)
+        view.contentBottomInset = 64
+        XCTAssertEqual(bottomY, 636)
         view.contentBottomInset = 0
         XCTAssertEqual(bottomY, 700)
     }
@@ -64,7 +64,7 @@ final class FloatingTabBarIntegrationTests: XCTestCase {
         let view = PeerListContainerView(frame: window.contentView!.bounds)
         window.contentView!.addSubview(view)
         view.tableView.frame = view.bounds
-        view.contentBottomInset = 56
+        view.contentBottomInset = 64
         for index in 0 ..< 20 {
             _ = view.tableView.addItem(item: FloatingTabBarTestRow(view.bounds.size, stableId: index))
         }
@@ -73,6 +73,6 @@ final class FloatingTabBarIntegrationTests: XCTestCase {
         view.layoutSubtreeIfNeeded()
         let row = view.tableView.rectOf(item: view.tableView.item(at: 19))
         let visibleRow = view.convert(row, from: view.tableView.view)
-        XCTAssertLessThanOrEqual(visibleRow.maxY, view.bounds.height - 56)
+        XCTAssertLessThanOrEqual(visibleRow.maxY, view.bounds.height - 64)
     }
 }
