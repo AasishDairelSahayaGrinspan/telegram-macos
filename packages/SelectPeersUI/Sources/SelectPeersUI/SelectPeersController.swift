@@ -1652,6 +1652,7 @@ public class SelectPeersController: SelectPeersMainController<[PeerId], Void, Se
         let context = self.context
         let account = self.context.account
         let interactions = self.interactions
+        let behavior = self.behavior
         
         interactions.add(observer: self)
         
@@ -1882,6 +1883,7 @@ open class SelectPeersModalController : ModalViewController, Notifable {
         let interactions = self.interactions
         let initialSize = atomicSize
         let account = context.account
+        let behavior = self.behavior
         genericView.customTheme = behavior.customTheme
         
         
