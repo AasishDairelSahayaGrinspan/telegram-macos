@@ -25,6 +25,7 @@ def main():
     parser.add_argument('--source-ref')
     parser.add_argument('--benchmark', action='store_true')
     parser.add_argument('--reverse', action='store_true')
+    parser.add_argument('--render-output', type=Path)
     args = parser.parse_args()
     source = subprocess.check_output(['git', 'show', f'{args.source_ref}:{SOURCE}'], cwd=ROOT, text=True) if args.source_ref else (ROOT / SOURCE).read_text()
     bridge_source = (ROOT / 'packages/Strings/Sources/Strings/Strings.swift').read_text()
@@ -54,6 +55,8 @@ let package = Package(name: "TextNormalization", platforms: [.macOS(.v10_13)], t
         environment = os.environ.copy()
         environment['CLANG_MODULE_CACHE_PATH'] = str(package / 'ModuleCache')
         environment['SWIFT_MODULECACHE_PATH'] = str(package / 'ModuleCache')
+        if args.render_output:
+            environment['TEXT_NORMALIZATION_SNAPSHOTS'] = str(args.render_output.resolve())
         options = ['--package-path', str(package), '--disable-sandbox', '--jobs', '4']
         if args.benchmark:
             command = ['swift', 'run', *options, '-c', 'release', 'Benchmark']

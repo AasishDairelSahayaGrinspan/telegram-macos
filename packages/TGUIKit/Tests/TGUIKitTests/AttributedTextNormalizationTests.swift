@@ -1,4 +1,6 @@
 import AppKit
+import CoreText
+import ImageIO
 import XCTest
 @testable import TGUIKit
 
@@ -132,5 +134,48 @@ final class AttributedTextNormalizationTests: XCTestCase {
             }
         }
         XCTAssertEqual(mismatches, 0)
+    }
+
+    func testCoreTextRenderingMatchesReference() throws {
+        func render(_ text: NSAttributedString) -> (Data, CGImage) {
+            let context = CGContext(data: nil, width: 640, height: 360, bitsPerComponent: 8, bytesPerRow: 640 * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+            context.setFillColor(CGColor(gray: 1, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: 640, height: 360))
+            context.scaleBy(x: 2, y: 2)
+            context.textMatrix = .identity
+            let path = CGPath(rect: CGRect(x: 8, y: 8, width: 304, height: 164), transform: nil)
+            let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
+            let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+            CTFrameDraw(frame, context)
+            return (Data(bytes: context.data!, count: context.bytesPerRow * context.height), context.makeImage()!)
+        }
+        let texts = [
+            "Привет 🙂\nhello\nworld",
+            "  a\u{2028}b\u{fffc}c  ",
+            "a\u{2028}\u{0301}b\u{2028}c",
+            "👩🏽‍💻\nمرحبا\u{2028}中文 e\u{0301} 🇷🇺",
+            "\n\t \u{2028}",
+            String(repeating: "hello 🙂\u{2028}world\u{fffc}", count: 8)
+        ]
+        let directory = ProcessInfo.processInfo.environment["TEXT_NORMALIZATION_SNAPSHOTS"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        if let directory {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        for (index, text) in texts.enumerated() {
+            let input = styled(text)
+            for trim in [false, true] {
+                let before = render(trim ? input.referenceTrimmed : input.referenceTrimNewLinesToSpace)
+                let after = render(trim ? input.trimmed : input.trimNewLinesToSpace)
+                XCTAssertEqual(after.0, before.0, "case \(index), trim=\(trim)")
+                if let directory {
+                    for (label, image) in [("before", before.1), ("after", after.1)] {
+                        let file = directory.appendingPathComponent("\(index)-\(trim ? "trim" : "preview")-\(label).png")
+                        let destination = CGImageDestinationCreateWithURL(file as CFURL, "public.png" as CFString, 1, nil)!
+                        CGImageDestinationAddImage(destination, image, nil)
+                        XCTAssertTrue(CGImageDestinationFinalize(destination))
+                    }
+                }
+            }
+        }
     }
 }
