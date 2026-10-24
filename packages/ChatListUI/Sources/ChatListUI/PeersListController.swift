@@ -1898,7 +1898,8 @@ public class PeerListContainerView : Control {
         var bottomControlsY = size.height - contentBottomInset
         for view in [downloads as NSView?, removalUndo as NSView?].compactMap({ $0 }) {
             let edge: CGFloat = 12
-            let rect = NSMakeRect(edge, bottomControlsY - view.frame.height - edge, size.width - edge * 2, view.frame.height)
+            let y = bottomControlsY - view.frame.height - edge
+            let rect = view is DownloadsControl ? downloadsFrame(in: size, y: y) : NSMakeRect(edge, y, size.width - edge * 2, view.frame.height)
             transition.updateFrame(view: view, frame: rect)
             bottomControlsY = rect.minY
         }
@@ -1916,6 +1917,11 @@ public class PeerListContainerView : Control {
             }
             transition.updateFrame(view: view, frame: rect)
         }
+    }
+
+    private func downloadsFrame(in size: NSSize, y: CGFloat) -> NSRect {
+        let width = min(500, max(0, size.width - 40))
+        return NSMakeRect(floorToScreenPixels((size.width - width) / 2), y, width, 30)
     }
 
     private var pendingRemovalUndo: (toast: PendingChatRemovalToast, undo: () -> Void)?
@@ -1969,7 +1975,6 @@ public class PeerListContainerView : Control {
 
     fileprivate func applyDownloadsVisibility(animated: Bool) {
         let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.2, curve: .easeInOut) : .immediate
-        let edge: CGFloat = 12
         let allowed: Bool
         if let st = self.state {
             let hideContent = st.splitState == .minimisize || st.appear == .short
@@ -1982,7 +1987,7 @@ public class PeerListContainerView : Control {
             if let view = self.downloads {
                 current = view
             } else {
-                current = DownloadsControl(frame: NSMakeRect(edge, frame.height, frame.width - edge * 2, 30))
+                current = DownloadsControl(frame: downloadsFrame(in: frame.size, y: frame.height))
                 self.downloads = current
                 addSubview(current, positioned: .above, relativeTo: self.tableView)
                 if animated {
@@ -1995,7 +2000,7 @@ public class PeerListContainerView : Control {
             }, for: .Click)
         } else if let view = self.downloads {
             self.downloads = nil
-            transition.updateFrame(view: view, frame: NSRect(origin: NSMakePoint(edge, frame.height), size: view.frame.size), completion: { _ in
+            transition.updateFrame(view: view, frame: downloadsFrame(in: frame.size, y: frame.height), completion: { _ in
                 view.removeFromSuperview()
             })
         }
