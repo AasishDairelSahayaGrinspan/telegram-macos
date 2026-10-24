@@ -1,5 +1,6 @@
 import AppKit
 import TGUIKit
+import ColorPalette
 
 _ = NSApplication.shared
 NSApp.setActivationPolicy(.accessory)
@@ -30,6 +31,7 @@ let composer = ComposerFixture(button)
 var sends = 0
 button.send.set(handler: { _ in sends += 1 }, for: .Click)
 
+if !__CAPTURES_ONLY__ {
 for amount: Int64 in [1, 9, 99, 999, 1000, 12500, 1000000, 999999999] {
     _ = button.update(state: state(.paidStars(amount: amount)), animated: false)
     let paid = button.sendPaidMessages!
@@ -80,9 +82,16 @@ _ = button.update(state: state(.send), animated: false)
 check(button.isInField && button.desiredSize == NSMakeSize(40, 40), "ordinary send geometry changed")
 _ = button.update(state: state(.slowMode(text: "00:30", isBoost: false)), animated: false)
 check(!button.isInField && button.desiredSize.width >= 40, "slow-mode placement changed")
+}
 
 if let snapshotPath {
+    let ghost = LiquidGlassView(frame: .zero, cornerRadius: 999, hasShadow: true, hasBorder: true)
+    root.addSubview(ghost, positioned: .below, relativeTo: button)
+    window.setFrameOrigin(NSMakePoint(150, 150))
+    window.setContentSize(NSMakeSize(350, 60))
+    let initial = PresentationTheme.current
     for (name, color, appearance) in [("dark", NSColor(calibratedRed: 0.06, green: 0.09, blue: 0.12, alpha: 1), NSAppearance.Name.darkAqua), ("light", NSColor.white, .aqua)] {
+        updateTheme(PresentationTheme(colors: name == "dark" ? darkPalette : whitePalette, search: initial.search, inputTheme: initial.inputTheme))
         root.backgroundColor = color
         field.backgroundColor = name == "dark" ? NSColor(calibratedRed: 0.13, green: 0.17, blue: 0.21, alpha: 1) : NSColor(calibratedWhite: 0.93, alpha: 1)
         window.appearance = NSAppearance(named: appearance)
@@ -91,13 +100,27 @@ if let snapshotPath {
             let frames = composer.frames(width: 350)
             root.setFrameSize(NSMakeSize(350, 60))
             field.frame = frames.field
+            ghost.frame = frames.ghost
             button.frame = frames.send
             button.updateLayout(size: frames.send.size, transition: .immediate)
             root.layoutSubtreeIfNeeded()
-            let rep = root.bitmapImageRepForCachingDisplay(in: root.bounds)!
-            root.cacheDisplay(in: root.bounds, to: rep)
-            try! rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: snapshotPath + "/" + name + "-" + String(amount) + ".png"))
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            window.display()
+            CATransaction.flush()
+            RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+            let capture = Process()
+            capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), snapshotPath + "/" + name + "-" + String(amount) + ".png"]
+            try! capture.run()
+            capture.waitUntilExit()
+            precondition(capture.terminationStatus == 0, "Window capture failed")
         }
     }
+    window.orderOut(nil)
 }
-print("PASS: \(checks) native paid-send size, placement, hit-test, callback and transition checks")
+if __CAPTURES_ONLY__ {
+    print("Baseline component capture complete; current-layout assertions were not run")
+} else {
+    print("PASS: \(checks) native paid-send size, placement, hit-test, callback and transition checks")
+}

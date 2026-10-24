@@ -10,11 +10,16 @@ fixtures = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
 parser.add_argument("--scratch-path", type=Path)
 parser.add_argument("--snapshots", type=Path)
+parser.add_argument("--revision")
+parser.add_argument("--captures-only", action="store_true")
 args = parser.parse_args()
+if args.revision and not args.captures_only:
+    parser.error("Use --captures-only when rendering a baseline revision")
 
 
 def source(name):
-    return (root / "packages/ChatUI/Sources/ChatUI" / (name + ".swift")).read_text()
+    path = "packages/ChatUI/Sources/ChatUI/" + name + ".swift"
+    return subprocess.check_output(["git", "show", args.revision + ":" + path], cwd=root, text=True) if args.revision else (root / path).read_text()
 
 
 def block(text, marker):
@@ -37,7 +42,7 @@ parts = {
     "__STATE__": block(button, "public struct State:"),
     "__CONSTANTS__": constants,
     "__FIELD_STATE__": block(button, "public var isInField:"),
-    "__FIELD_ACTION__": block(button, "private func isFieldAction("),
+    "__FIELD_ACTION__": block(button, "private func isFieldAction(") if "private func isFieldAction(" in button else "",
     "__DESIRED_SIZE__": block(button, "public var desiredSize:"),
     "__UPDATE__": block(button, "public func update(state:"),
     "__LAYOUT__": block(button, "public func updateLayout(size:"),
@@ -55,14 +60,16 @@ snapshot_path = args.snapshots.resolve() if args.snapshots else None
 if snapshot_path:
     snapshot_path.mkdir(parents=True, exist_ok=True)
 parts["__SNAPSHOT_PATH__"] = json.dumps(str(snapshot_path)) if snapshot_path else "nil"
+parts["__CAPTURES_ONLY__"] = str(args.captures_only).lower()
 
 with tempfile.TemporaryDirectory(prefix="telegram-paid-send-") as directory:
     directory = Path(directory)
     dependency = json.dumps(str(root / "packages/TGUIKit"))
+    palette_dependency = json.dumps(str(root / "packages/ColorPalette"))
     (directory / "Package.swift").write_text('''// swift-tools-version:5.9
 import PackageDescription
-let package = Package(name: "PaidSendChecks", platforms: [.macOS(.v12)], dependencies: [.package(path: DEPENDENCY)], targets: [.executableTarget(name: "PaidSendChecks", dependencies: [.product(name: "TGUIKit", package: "TGUIKit")], path: "Sources")])
-'''.replace("DEPENDENCY", dependency))
+let package = Package(name: "PaidSendChecks", platforms: [.macOS(.v12)], dependencies: [.package(path: DEPENDENCY), .package(path: PALETTE)], targets: [.executableTarget(name: "PaidSendChecks", dependencies: [.product(name: "TGUIKit", package: "TGUIKit"), "ColorPalette"], path: "Sources")])
+'''.replace("DEPENDENCY", dependency).replace("PALETTE", palette_dependency))
     (directory / "Sources").mkdir()
     for name in ["Fixture.swift", "main.swift"]:
         text = (fixtures / name).read_text()
