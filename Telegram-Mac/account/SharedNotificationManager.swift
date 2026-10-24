@@ -29,6 +29,58 @@ func getNotificationToneFile(account: Account, sound: PeerMessageSound) -> Signa
     }
 }
 
+struct NotificationPresentation {
+    let muted: Bool
+    let sound: PeerMessageSound
+    let showPreview: Bool
+    let hideSender: Bool
+}
+
+private func effectiveCategorySound(_ sound: PeerMessageSound) -> PeerMessageSound {
+    if sound == defaultCloudPeerNotificationSound {
+        return .default
+    }
+    return sound
+}
+
+private func notificationPresentation(source: SharedNotificationManager.Source, message: Message, globalSettings: GlobalNotificationSettingsSet, peerSettings: TelegramPeerNotificationSettings?) -> NotificationPresentation {
+    switch source {
+    case .reaction:
+        let reactionSettings = globalSettings.reactionSettings
+        return NotificationPresentation(muted: false, sound: effectiveCategorySound(reactionSettings.sound), showPreview: true, hideSender: reactionSettings.hideSender == .hide)
+    case .messages:
+        let categorySettings: MessageNotificationSettings
+        switch message.peers[message.id.peerId] {
+        case let channel as TelegramChannel:
+            if case .broadcast = channel.info {
+                categorySettings = globalSettings.channels
+            } else {
+                categorySettings = globalSettings.groupChats
+            }
+        case is TelegramUser, is TelegramSecretChat:
+            categorySettings = globalSettings.privateChats
+        default:
+            categorySettings = globalSettings.groupChats
+        }
+        let sound: PeerMessageSound
+        if let peerSound = peerSettings?.messageSound, peerSound != .default {
+            sound = peerSound
+        } else {
+            sound = effectiveCategorySound(categorySettings.sound)
+        }
+        let showPreview: Bool
+        switch peerSettings?.displayPreviews ?? .default {
+        case .show:
+            showPreview = true
+        case .hide:
+            showPreview = false
+        case .default:
+            showPreview = categorySettings.displayPreviews
+        }
+        return NotificationPresentation(muted: peerSettings?.isMuted ?? false, sound: sound, showPreview: showPreview, hideSender: false)
+    }
+}
+
 struct LockNotificationsData : Equatable {
     let screenLock:Bool
     let passcodeLock:Bool
@@ -392,7 +444,24 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
             
             return engine.stickers.resolveInlineStickers(fileIds: Array(fileIds)) |> mapToSignal { files in
                 return engine.account.postbox.transaction { transaction in
-                    var reactions:[ReactionTuple] = reactions.map { .init(reactionAuthor: $0, reaction: $1, message: $2, timestamp: $3) }
+                    let reactionSettings = transaction.getPreferencesEntry(key: PreferencesKeys.globalNotifications)?.get(GlobalNotificationSettings.self)?.effective.reactionSettings ?? PeerReactionNotificationSettings.default
+                    
+                    var reactions:[ReactionTuple] = reactions.map { .init(reactionAuthor: $0, reaction: $1, message: $2, timestamp: $3) }.filter { reaction in
+                        switch reactionSettings.messages {
+                        case .nobody:
+                            return false
+                        case .contacts:
+                            if !transaction.isPeerContact(peerId: reaction.reactionAuthor.id) {
+                                return false
+                            }
+                        case .everyone:
+                            break
+                        }
+                        if let notifications = transaction.getPeerNotificationSettings(id: reaction.message.id.peerId) as? TelegramPeerNotificationSettings, notifications.isMuted {
+                            return false
+                        }
+                        return true
+                    }
                     
                     for (i, reaction) in reactions.enumerated() {
                         var threadData: MessageHistoryThreadData?
@@ -482,36 +551,43 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
                     |> take(1)
                     |> map { data in return (sources, images, inAppSettings, data.isLocked)}
             }
-            |> mapToSignal { values -> Signal<([Source], [MessageId:NSImage], InAppNotificationSettings, Bool, Peer, String?, TelegramPeerNotificationSettings?), NoError> in
-            
-                guard let message = values.0.first?.messages.first else {
+            |> mapToSignal { sources, images, inAppSettings, screenIsLocked -> Signal<([Source], [MessageId:NSImage], InAppNotificationSettings, Bool, Peer, [String: NotificationPresentation], [(PeerMessageSound, String?)]), NoError> in
+                if sources.isEmpty {
                     return .complete()
                 }
-                return account.postbox.loadedPeerWithId(account.peerId) |> mapToSignal { peer in
-                    return account.postbox.transaction { transaction -> Signal<([Source], [MessageId:NSImage], InAppNotificationSettings, Bool, Peer, String?, TelegramPeerNotificationSettings?), NoError> in
-                        let notifications = transaction.getPeerNotificationSettings(id: message.id.peerId) as? TelegramPeerNotificationSettings
-                        
-                        if let messageSound = notifications?.messageSound {
-                            switch messageSound {
-                            case .none:
-                                return .single((values.0, values.1, values.2, values.3, peer, nil, notifications))
-                            case .default:
-                                return getNotificationToneFile(account: account, sound: values.2.tone) |> map { soundPath in
-                                    return (values.0, values.1, values.2, values.3, peer, soundPath, notifications)
-                                }
-                            default:
-                                return getNotificationToneFile(account: account, sound: messageSound) |> map { soundPath in
-                                    return (values.0, values.1, values.2, values.3, peer, soundPath, notifications)
-                                }
-                            }
-                        } else {
-                            return getNotificationToneFile(account: account, sound: values.2.tone) |> map { soundPath in
-                                return (values.0, values.1, values.2, values.3, peer, soundPath, notifications)
+                return account.postbox.loadedPeerWithId(account.peerId) |> mapToSignal { accountPeer in
+                    return account.postbox.transaction { transaction -> [String: NotificationPresentation] in
+                        let globalSettings = transaction.getPreferencesEntry(key: PreferencesKeys.globalNotifications)?.get(GlobalNotificationSettings.self)?.effective ?? GlobalNotificationSettingsSet.defaultSettings
+                        var result: [String: NotificationPresentation] = [:]
+                        for source in sources {
+                            for message in source.messages {
+                                result[source.key(for: message)] = notificationPresentation(source: source, message: message, globalSettings: globalSettings, peerSettings: transaction.getPeerNotificationSettings(id: message.id.peerId) as? TelegramPeerNotificationSettings)
                             }
                         }
-                    } |> switchToLatest
+                        return result
+                    } |> mapToSignal { presentations in
+                        var sounds: [PeerMessageSound] = []
+                        for presentation in presentations.values where !sounds.contains(presentation.sound) {
+                            sounds.append(presentation.sound)
+                        }
+                        let paths: [Signal<(PeerMessageSound, String?), NoError>] = sounds.map { sound in
+                            switch sound {
+                            case .none:
+                                return .single((sound, nil))
+                            case .default:
+                                return getNotificationToneFile(account: account, sound: inAppSettings.tone) |> map { (sound, $0) }
+                            default:
+                                return getNotificationToneFile(account: account, sound: sound)
+                                |> timeout(3.0, queue: Queue.concurrentDefaultQueue(), alternate: getNotificationToneFile(account: account, sound: inAppSettings.tone))
+                                |> map { (sound, $0) }
+                            }
+                        }
+                        return combineLatest(paths) |> take(1) |> map { paths in
+                            return (sources, images, inAppSettings, screenIsLocked, accountPeer, presentations, paths)
+                        }
+                    }
                 }
-            } |> deliverOnMainQueue).start(next: { sources, images, inAppSettings, screenIsLocked, accountPeer, soundPath, notifications in
+            } |> deliverOnMainQueue).start(next: { sources, images, inAppSettings, screenIsLocked, accountPeer, presentations, soundPaths in
                 
                 if !primary, !inAppSettings.notifyAllAccounts {
                     return
@@ -527,7 +603,8 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
                         if message.isImported {
                             continue
                         }
-                        if let notifications = notifications, notifications.isMuted {
+                        let presentation = presentations[source.key(for: message)] ?? NotificationPresentation(muted: false, sound: .default, showPreview: true, hideSender: false)
+                        if presentation.muted {
                             if message.consumableMention == nil {
                                 continue
                             }
@@ -580,7 +657,7 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
                                 let reactionText: String
                                 switch value {
                                 case let .builtin(emoji):
-                                    reactionText = emoji
+                                    reactionText = emoji.normalizedEmoji
                                 case let .custom(fileId):
                                     let mediaId = MediaId(namespace: Namespaces.Media.CloudFile, id: fileId)
                                     let file = file ?? message.associatedMedia[mediaId] as? TelegramMediaFile
@@ -622,9 +699,20 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
                                 subText = "\(txt) → \(threadData.info.title)"
                             }
                             
-                            if !inAppSettings.displayPreviews || message.peers[message.id.peerId] is TelegramSecretChat || screenIsLocked {
-                                text = strings().notificationLockedPreview
-                                subText = nil
+                            switch source {
+                            case .reaction:
+                                if presentation.hideSender {
+                                    title = appName
+                                }
+                                if presentation.hideSender || !inAppSettings.displayPreviews || screenIsLocked {
+                                    text = strings().notificationReactionHidden
+                                    subText = nil
+                                }
+                            case .messages:
+                                if !inAppSettings.displayPreviews || !presentation.showPreview || message.peers[message.id.peerId] is TelegramSecretChat || screenIsLocked {
+                                    text = strings().notificationLockedPreview
+                                    subText = nil
+                                }
                             }
                             
                             let notification = NSUserNotification()
@@ -632,6 +720,7 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
                             notification.identifier = "msg_\(message.id.string)"
                             
                             
+                            let soundPath = soundPaths.first(where: { $0.0 == presentation.sound })?.1
                             if #available(macOS 10.14, *) {
                                 switch inAppSettings.tone {
                                 case .none:
@@ -648,13 +737,7 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
                                 }
                             }
 
-                            switch source {
-                            case .messages:
-                                if message.muted {
-                                    notification.soundName = nil
-                                    title += " 🔕"
-                                }
-                            case .reaction:
+                            if case .messages = source, message.muted {
                                 notification.soundName = nil
                                 title += " 🔕"
                             }
@@ -670,7 +753,7 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
                             notification.title = title
                             notification.informativeText = text as String
                             notification.subtitle = subText
-                            notification.contentImage = screenIsLocked ? nil : images[message.id]
+                            notification.contentImage = screenIsLocked || presentation.hideSender ? nil : images[message.id]
                             notification.hasReplyButton = hasReplyButton
                             
                             notification.hasActionButton = !message.wasScheduled
