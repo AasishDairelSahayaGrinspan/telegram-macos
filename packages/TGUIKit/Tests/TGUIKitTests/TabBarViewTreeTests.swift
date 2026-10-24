@@ -43,6 +43,14 @@ private final class CustomTabItem: TabItem {
     }
 }
 
+private final class TabSelectionTestLayer: CALayer {
+    var displayedLayer: TabSelectionTestLayer?
+
+    override func presentation() -> Self? {
+        return displayedLayer as? Self
+    }
+}
+
 final class TabBarViewTreeTests: XCTestCase {
     override func setUp() {
         super.setUp()
@@ -56,6 +64,7 @@ final class TabBarViewTreeTests: XCTestCase {
 
     private func makeBar(width: CGFloat = 333, selected: Int = 0) -> TabBarView {
         let bar = TabBarView(frame: NSMakeRect(0, 0, width, 48))
+        bar.reduceMotion = { false }
         for index in 0 ..< 4 {
             bar.addTab(makeTab(badge: index == 2))
         }
@@ -66,6 +75,173 @@ final class TabBarViewTreeTests: XCTestCase {
     private func center(_ bar: TabBarView, _ index: Int) -> NSPoint {
         let frame = bar.control(for: index).frame
         return NSMakePoint(frame.midX, frame.midY)
+    }
+
+    private func selectionLayer(_ bar: TabBarView) throws -> TabSelectionTestLayer {
+        let view = bar.subviews[1]
+        let layer = TabSelectionTestLayer()
+        layer.anchorPoint = try XCTUnwrap(view.layer).anchorPoint
+        view.layer = layer
+        return layer
+    }
+
+    private func positionAnimation(_ layer: CALayer) throws -> CABasicAnimation {
+        return try XCTUnwrap(layer.animation(forKey: "position") as? CABasicAnimation)
+    }
+
+    func testImmediateClickReleaseKeepsTheFullTabTransition() throws {
+        for (source, target) in [(3, 0), (0, 3)] {
+            let bar = makeBar(selected: source)
+            let delegate = TabSelectionDelegate()
+            bar.delegate = delegate
+            let layer = try selectionLayer(bar)
+            let initialPosition = layer.position
+            let initialBounds = layer.bounds
+            let point = center(bar, target)
+            bar.beginSelection(at: point)
+            bar.endSelection(at: point)
+            let animation = try positionAnimation(layer)
+            XCTAssertEqual((animation.fromValue as? NSValue)?.pointValue, initialPosition)
+            XCTAssertEqual((animation.toValue as? NSValue)?.pointValue, layer.position)
+            XCTAssertEqual(animation.duration / Double(animation.speed), 0.4, accuracy: 0.001)
+            let bounds = try XCTUnwrap(layer.animation(forKey: "bounds") as? CABasicAnimation)
+            XCTAssertEqual((bounds.fromValue as? NSValue)?.rectValue, initialBounds)
+            XCTAssertEqual((bounds.toValue as? NSValue)?.rectValue, layer.bounds)
+            XCTAssertEqual(bar.selectionFrame, bar.control(for: target).frame)
+            XCTAssertEqual(bar.selectedIndex, target)
+            XCTAssertEqual(delegate.changes, [target])
+            XCTAssertFalse(bar.isTrackingSelection)
+        }
+    }
+
+    func testClickJitterAndRedundantLayoutsPreserveThePressAnimation() throws {
+        let bar = makeBar(selected: 3)
+        let layer = try selectionLayer(bar)
+        let point = center(bar, 0)
+        bar.beginSelection(at: point)
+        let animation = try positionAnimation(layer)
+        let frame = bar.selectionFrame
+        for offset in [CGFloat(0), 2, -2] {
+            bar.updateSelection(at: NSMakePoint(point.x + offset, point.y + 10))
+            bar.layout()
+            bar.setFrameSize(bar.frame.size)
+            XCTAssertEqual(bar.selectionFrame, frame)
+            XCTAssertTrue(try positionAnimation(layer).isEqual(animation))
+        }
+        bar.endSelection(at: NSMakePoint(point.x + 2, point.y))
+        XCTAssertEqual((try positionAnimation(layer).fromValue as? NSValue)?.pointValue, (animation.fromValue as? NSValue)?.pointValue)
+        XCTAssertEqual(bar.selectedIndex, 0)
+    }
+
+    func testReleaseRetargetsFromThePresentedPositionAndBounds() throws {
+        for (source, target) in [(3, 0), (0, 3)] {
+            let bar = makeBar(selected: source)
+            let layer = try selectionLayer(bar)
+            let point = center(bar, target)
+            bar.beginSelection(at: point)
+            let displayed = TabSelectionTestLayer()
+            displayed.position = NSMakePoint(150, 1)
+            displayed.bounds = NSMakeRect(0, 0, 90, 46)
+            layer.displayedLayer = displayed
+            bar.endSelection(at: point)
+            XCTAssertEqual((try positionAnimation(layer).fromValue as? NSValue)?.pointValue, displayed.position)
+            let bounds = try XCTUnwrap(layer.animation(forKey: "bounds") as? CABasicAnimation)
+            XCTAssertEqual((bounds.fromValue as? NSValue)?.rectValue, displayed.bounds)
+            XCTAssertEqual((bounds.toValue as? NSValue)?.rectValue, layer.bounds)
+        }
+    }
+
+    func testRapidClicksKeepTheirUnrenderedStartingPosition() throws {
+        let bar = makeBar(selected: 3)
+        let layer = try selectionLayer(bar)
+        let initialPosition = layer.position
+        for index in [0, 2, 1, 0] {
+            let point = center(bar, index)
+            bar.beginSelection(at: point)
+            bar.endSelection(at: point)
+            XCTAssertEqual((try positionAnimation(layer).fromValue as? NSValue)?.pointValue, initialPosition)
+            XCTAssertEqual(bar.selectedIndex, index)
+        }
+    }
+
+    func testHorizontalDraggingStartsAtThreePointsAndTracksUntilRelease() throws {
+        let bar = makeBar(selected: 3)
+        let layer = try selectionLayer(bar)
+        let delegate = TabSelectionDelegate()
+        bar.delegate = delegate
+        let start = center(bar, 0)
+        bar.beginSelection(at: start)
+        bar.updateSelection(at: NSMakePoint(start.x + 3, start.y))
+        XCTAssertNil(layer.animation(forKey: "position"))
+        XCTAssertNil(layer.animation(forKey: "bounds"))
+        XCTAssertEqual(bar.selectionFrame.midX, start.x + 3, accuracy: 0.001)
+        let end = center(bar, 1)
+        bar.updateSelection(at: NSMakePoint(end.x - 5, end.y))
+        bar.endSelection(at: end)
+        XCTAssertEqual(bar.selectedIndex, 1)
+        XCTAssertEqual(bar.selectionFrame.midX, end.x, accuracy: 0.001)
+        XCTAssertEqual(delegate.changes, [1])
+        XCTAssertNotNil(layer.animation(forKey: "bounds"))
+    }
+
+    func testCancellationAnimatesBackFromThePresentedFrame() throws {
+        let bar = makeBar(selected: 3)
+        let delegate = TabSelectionDelegate()
+        bar.delegate = delegate
+        let layer = try selectionLayer(bar)
+        let initialFrame = bar.selectionFrame
+        bar.beginSelection(at: center(bar, 0))
+        let displayed = TabSelectionTestLayer()
+        displayed.position = NSMakePoint(150, 1)
+        displayed.bounds = NSMakeRect(0, 0, 90, 46)
+        layer.displayedLayer = displayed
+        bar.cancelSelection()
+        XCTAssertEqual((try positionAnimation(layer).fromValue as? NSValue)?.pointValue, displayed.position)
+        XCTAssertEqual(bar.selectionFrame, initialFrame)
+        XCTAssertEqual(bar.selectedIndex, 3)
+        XCTAssertTrue(delegate.changes.isEmpty)
+        XCTAssertEqual(delegate.scrollCount, 0)
+    }
+
+    func testNewSelectionsRetargetAnActivePressWithoutSnappingBack() throws {
+        for programmatic in [false, true] {
+            let bar = makeBar(selected: 3)
+            let layer = try selectionLayer(bar)
+            let initialPosition = layer.position
+            bar.beginSelection(at: center(bar, 0))
+            if programmatic {
+                bar.setSelectedIndex(1, respondToDelegate: false, animated: true)
+            } else {
+                let point = center(bar, 1)
+                bar.beginSelection(at: point)
+                bar.endSelection(at: point)
+            }
+            XCTAssertEqual((try positionAnimation(layer).fromValue as? NSValue)?.pointValue, initialPosition)
+            XCTAssertEqual(bar.selectedIndex, 1)
+        }
+    }
+
+    func testReduceMotionKeepsClicksAndDraggingImmediate() throws {
+        let bar = makeBar(selected: 3)
+        bar.reduceMotion = { true }
+        let layer = try selectionLayer(bar)
+        let point = center(bar, 0)
+        bar.beginSelection(at: point)
+        XCTAssertEqual(bar.selectionFrame.height, 40)
+        XCTAssertEqual(bar.selectionFrame.midX, point.x)
+        bar.endSelection(at: point)
+        XCTAssertNil(layer.animation(forKey: "position"))
+        XCTAssertNil(layer.animation(forKey: "bounds"))
+        bar.beginSelection(at: point)
+        bar.updateSelection(at: center(bar, 2))
+        bar.endSelection(at: center(bar, 2))
+        XCTAssertEqual(bar.selectedIndex, 2)
+        XCTAssertEqual(bar.selectionFrame.height, 40)
+        XCTAssertNil(layer.animation(forKey: "position"))
+        XCTAssertNil(layer.animation(forKey: "bounds"))
+        for control in bar.itemControls {
+            XCTAssertNil(control.layer?.animation(forKey: "transform"))
+        }
     }
 
     func testCapsuleFloatsInsideItsPaneAndCapsItsWidth() {

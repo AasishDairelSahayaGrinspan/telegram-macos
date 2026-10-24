@@ -102,6 +102,7 @@ public class TabBarView: View {
         let start: NSPoint
         let center: CGFloat
         var position: CGFloat
+        var isDragging = false
     }
 
     private var tabs: [TabItem] = []
@@ -116,6 +117,7 @@ public class TabBarView: View {
     private var escapeMonitor: Any?
     private var resignObserver: NSObjectProtocol?
     private var contentScales: [CGFloat] = []
+    var reduceMotion: () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
     private var itemLayout: FloatingTabBarLayout {
         return FloatingTabBarLayout(size: bounds.size, count: tabs.count)
@@ -343,7 +345,7 @@ public class TabBarView: View {
         guard tabs.indices.contains(index) else {
             return
         }
-        cancelSelection(animated: false)
+        finishGesture()
         selectedIndex = index
         updateSelection(animated: animated)
         if respondToDelegate {
@@ -363,7 +365,7 @@ public class TabBarView: View {
         guard !isHidden, let index = itemLayout.index(at: point) else {
             return
         }
-        cancelSelection(animated: false)
+        finishGesture()
         gesture = SelectionGesture(start: point, center: itemLayout.itemFrames[index].midX, position: CGFloat(index))
         escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.gesture != nil, event.window === self.window, event.keyCode == 53 else {
@@ -381,20 +383,26 @@ public class TabBarView: View {
     }
 
     func updateSelection(at point: NSPoint) {
-        guard var gesture else {
+        guard var gesture, gesture.isDragging || abs(point.x - gesture.start.x) >= 3 else {
             return
         }
-        selectionView.layer?.removeAllAnimations()
-        gesture.position = itemLayout.position(at: gesture.center + point.x - gesture.start.x)
+        gesture.isDragging = true
+        let position = itemLayout.position(at: gesture.center + point.x - gesture.start.x)
+        let changed = gesture.position != position
+        gesture.position = position
         self.gesture = gesture
-        updateSelection(animated: false)
+        if changed {
+            updateSelection(animated: false)
+        }
     }
 
     func endSelection(at point: NSPoint) {
         guard gesture != nil else {
             return
         }
-        updateSelection(at: point)
+        if gesture?.isDragging == true {
+            updateSelection(at: point)
+        }
         let index = Int(gesture!.position.rounded())
         finishGesture()
         if index == selectedIndex {
@@ -428,7 +436,8 @@ public class TabBarView: View {
     }
 
     private func updateSelection(animated: Bool) {
-        let animated = animated && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let reduceMotion = self.reduceMotion()
+        let animated = animated && !reduceMotion
         let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.4, curve: .spring) : .immediate
         let previewIndex = gesture.map { Int($0.position.rounded()) } ?? selectedIndex
         for (index, control) in itemControls.enumerated() {
@@ -438,7 +447,7 @@ public class TabBarView: View {
                 control.isSelected = selected
                 tabs[index].setSelected(selected, for: icon, animated: animated)
             }
-            let scale: CGFloat = gesture != nil && selected && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? 1.15 : 1
+            let scale: CGFloat = gesture != nil && selected && !reduceMotion ? 1.15 : 1
             if contentScales[index] != scale, let layer = control.layer {
                 let previous = layer.presentation()?.transform ?? layer.transform
                 var transform = CATransform3DMakeTranslation(control.bounds.midX, control.bounds.midY, 0)
@@ -459,14 +468,41 @@ public class TabBarView: View {
     private func updateLens(transition: ContainedViewLayoutTransition) {
         selectionView.isHidden = tabs.isEmpty
         let position = gesture?.position ?? CGFloat(selectedIndex)
-        let lifted = gesture != nil && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let lifted = gesture != nil && !reduceMotion()
         let frame = itemLayout.selectionFrame(at: position, lifted: lifted)
         selectionView.layer?.cornerRadius = frame.height / 2
-        transition.updateFrame(view: selectionView, frame: frame)
+        updateSelectionFrame(frame, transition: transition)
         transition.updateFrame(view: liftedGlass, frame: frame.size.bounds)
         liftedGlass.cornerRadius = frame.height / 2
         liftedGlass.updateLayout(size: frame.size, transition: transition)
         transition.updateAlpha(view: liftedGlass, alpha: lifted ? 1 : 0)
+    }
+
+    private func updateSelectionFrame(_ frame: NSRect, transition: ContainedViewLayoutTransition) {
+        guard selectionView.frame != frame else {
+            return
+        }
+        guard let layer = selectionView.layer else {
+            selectionView.frame = frame
+            return
+        }
+        switch transition {
+        case .immediate:
+            layer.removeAnimation(forKey: "position")
+            layer.removeAnimation(forKey: "bounds")
+            selectionView.frame = frame
+        case let .animated(duration, curve):
+            let displayed = layer.presentation()
+            let positionAnimation = layer.animation(forKey: "position") as? CABasicAnimation
+            let boundsAnimation = layer.animation(forKey: "bounds") as? CABasicAnimation
+            let previousPosition = positionAnimation.map { displayed?.position ?? ($0.fromValue as? NSValue)?.pointValue ?? layer.position } ?? layer.position
+            let previousBounds = boundsAnimation.map { displayed?.bounds ?? ($0.fromValue as? NSValue)?.rectValue ?? layer.bounds } ?? layer.bounds
+            layer.removeAnimation(forKey: "position")
+            layer.removeAnimation(forKey: "bounds")
+            selectionView.frame = frame
+            layer.animatePosition(from: previousPosition, to: layer.position, duration: duration, timingFunction: curve.timingFunction)
+            layer.animateBounds(from: previousBounds, to: layer.bounds, duration: duration, timingFunction: curve.timingFunction)
+        }
     }
 
     public override var mouseDownCanMoveWindow: Bool {
