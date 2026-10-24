@@ -178,6 +178,9 @@ public func NotificationSoundController(context: any AccountContextProtocol, ton
             })
             
         }
+        let wasDisabled = stateValue.with { $0.tone == .none }
+        if wasDisabled != (tone == .none) {
+        }
         if let updateTone = updateTone {
             updateTone(tone)
         } else {

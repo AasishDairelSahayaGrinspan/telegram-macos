@@ -156,6 +156,8 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
     }
     
     private let disposableDict: DisposableDict<AccountRecordId> = DisposableDict()
+    private let inAppSettingsDisposable = MetaDisposable()
+    private let lockTimeoutDisposable = MetaDisposable()
     let accountManager: AccountManager<TelegramAccountManagerTypes>
     var resignTimestamp:Int32? = nil
     
@@ -178,6 +180,11 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
         }
         
         UNUserNotifications.initialize(manager: self)
+        
+        inAppSettingsDisposable.set((appNotificationSettings(accountManager: accountManager) |> deliverOnMainQueue).start(next: { [weak self] inAppSettings in
+            self?.showNotificationsOutOfFocus = inAppSettings.showNotificationsOutOfFocus
+            self?.requestUserAttention = inAppSettings.requestUserAttention
+        }))
 
         UNUserNotifications.current?.authorize(completion: { value in
             
@@ -257,7 +264,15 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
         })
         
         
+        let cachedLockTimeout = Atomic<Int32??>(value: nil)
+        lockTimeoutDisposable.set(combineLatest(accountManager.accessChallengeData(), passcodeSettingsView(accountManager)).start(next: { challenge, settings in
+            let _ = cachedLockTimeout.swap(.some(challenge.data.isLockable ? settings.timeout : nil))
+        }))
+        
         let passlock = Signal<Void, NoError>.single(Void()) |> delay(10, queue: Queue.concurrentDefaultQueue()) |> restart |> mapToSignal { () -> Signal<Int32?, NoError> in
+            if let timeout = cachedLockTimeout.with({ $0 }) {
+                return .single(timeout)
+            }
             return accountManager.transaction { transaction -> Int32? in
                 if transaction.getAccessChallengeData().isLockable {
                     return passcodeSettings(transaction).timeout
@@ -414,7 +429,7 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
             var threadData: MessageHistoryThreadData?
         }
         
-        let reactions: Signal<[ReactionTuple], NoError> = account.stateManager.reactionNotifications |> mapToSignal { reactions in
+        let reactions: Signal<[ReactionTuple], NoError> = .single([]) |> then(account.stateManager.reactionNotifications |> filter { !$0.isEmpty } |> mapToSignal { reactions in
             
             
             var fileIds: Set<Int64> = Set()
@@ -473,12 +488,12 @@ final class SharedNotificationManager : NSObject, NSUserNotificationCenterDelega
                 }
                 
             }
-        }
+        })
         
-        disposableDict.set((combineLatest(account.stateManager.notificationMessages, reactions) |> mapToSignal { messages, reactions -> Signal<([Source], InAppNotificationSettings), NoError> in
+        let notificationMessages: Signal<[([Message], PeerGroupId, Bool, MessageHistoryThreadData?)], NoError> = .single([]) |> then(account.stateManager.notificationMessages |> filter { !$0.isEmpty })
+        
+        disposableDict.set((combineLatest(notificationMessages, reactions) |> mapToSignal { messages, reactions -> Signal<([Source], InAppNotificationSettings), NoError> in
             return appNotificationSettings(accountManager: self.accountManager) |> take(1) |> mapToSignal { inAppSettings -> Signal<([Source], InAppNotificationSettings), NoError> in
-                self.showNotificationsOutOfFocus = inAppSettings.showNotificationsOutOfFocus
-                self.requestUserAttention = inAppSettings.requestUserAttention
                 if inAppSettings.enabled && inAppSettings.muteUntil < Int32(Date().timeIntervalSince1970) {
                     
                     let msgs:[Source] = messages.filter
