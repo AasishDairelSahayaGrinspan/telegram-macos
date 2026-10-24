@@ -11791,6 +11791,14 @@ public final class L10n {
   public static var notificationSettingsCategorySound: String  { return L10n.tr("Localizable", "NotificationSettings.Category.Sound") }
   /// Reset notifications
   public static var notificationSettingsConfirmReset: String  { return L10n.tr("Localizable", "NotificationSettings.Confirm.Reset") }
+  /// ALERT TONES
+  public static var notificationSettingsExceptionAlertTonesHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.AlertTonesHeader") }
+  /// CLASSIC
+  public static var notificationSettingsExceptionClassicTonesHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.ClassicTonesHeader") }
+  /// NOTIFICATIONS
+  public static var notificationSettingsExceptionNotificationsHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.NotificationsHeader") }
+  /// MESSAGE PREVIEW
+  public static var notificationSettingsExceptionPreviewHeader: String  { return L10n.tr("Localizable", "NotificationSettings.Exception.PreviewHeader") }
   /// Add an Exception
   public static var notificationSettingsExceptionsAdd: String  { return L10n.tr("Localizable", "NotificationSettings.Exceptions.Add") }
   /// Always Off

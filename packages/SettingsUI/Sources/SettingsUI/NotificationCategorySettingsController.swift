@@ -241,16 +241,16 @@ private final class Arguments {
     let openSound:()->Void
     let addException:()->Void
     let deleteAll:()->Void
-    let openPeer:(PeerId)->Void
+    let editException:(EnginePeer)->Void
     let exceptionMenu:(NotificationException)->[ContextMenuItem]
-    init(context: any AccountContextProtocol, toggleEnabled:@escaping()->Void, togglePreviews:@escaping()->Void, openSound:@escaping()->Void, addException:@escaping()->Void, deleteAll:@escaping()->Void, openPeer:@escaping(PeerId)->Void, exceptionMenu:@escaping(NotificationException)->[ContextMenuItem]) {
+    init(context: any AccountContextProtocol, toggleEnabled:@escaping()->Void, togglePreviews:@escaping()->Void, openSound:@escaping()->Void, addException:@escaping()->Void, deleteAll:@escaping()->Void, editException:@escaping(EnginePeer)->Void, exceptionMenu:@escaping(NotificationException)->[ContextMenuItem]) {
         self.context = context
         self.toggleEnabled = toggleEnabled
         self.togglePreviews = togglePreviews
         self.openSound = openSound
         self.addException = addException
         self.deleteAll = deleteAll
-        self.openPeer = openPeer
+        self.editException = editException
         self.exceptionMenu = exceptionMenu
     }
 }
@@ -397,10 +397,10 @@ private func entries(_ state: State, category: NotificationSettingsCategory, arg
         let tuple = ExceptionRow(exception: exception, status: exceptionStatus(exception, now: now), viewType: viewType)
         entries.append(.custom(sectionId: sectionId, index: index, value: .none, identifier: _id_exception(exception.peer.id), equatable: .init(tuple), comparable: nil, item: { initialSize, stableId in
             return ShortPeerRowItem(initialSize, peer: tuple.exception.peer._asPeer(), account: arguments.context.account, context: arguments.context, stableId: stableId, height: 46, photoSize: NSMakeSize(32, 32), status: tuple.status.isEmpty ? nil : tuple.status, inset: NSEdgeInsets(left: 20, right: 20), viewType: tuple.viewType, action: {
-                arguments.openPeer(tuple.exception.peer.id)
+                arguments.editException(tuple.exception.peer)
             }, contextMenuItems: {
                 return .single(arguments.exceptionMenu(tuple.exception))
-            }, menuOnAction: true)
+            })
         }))
         index += 1
     }
@@ -477,16 +477,18 @@ public func NotificationCategorySettingsController(context: any AccountContextPr
             guard let peerId = peerIds.first else {
                 return
             }
-            let settings = category.messageSettings(stateValue.with { $0.settings })
-            exceptionsContext.add(peerId)
-            _ = context.engine.peers.updatePeerMuteSetting(peerId: peerId, threadId: nil, muteInterval: settings.enabled ? Int32.max : 0).start()
+            _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer.Peer(id: peerId)) |> deliverOnMainQueue).start(next: { peer in
+                if let peer = peer {
+                    showModal(with: NotificationExceptionSettingsModalController(context: context, peer: peer, category: category, exceptionsContext: exceptionsContext, isNew: true), for: context.window)
+                }
+            })
         })
     }, deleteAll: {
         verifyAlert_button(for: context.window, information: strings().notificationSettingsExceptionsDeleteAllConfirm, ok: strings().notificationSettingsExceptionsDeleteAll, successHandler: { _ in
             removeExceptions(stateValue.with { $0.exceptions.map { $0.peer.id } })
         })
-    }, openPeer: { peerId in
-        BlockedPeersHooks.shared.openPeerInfo(context.bindings.rootNavigation(), context, peerId)
+    }, editException: { peer in
+        showModal(with: NotificationExceptionSettingsModalController(context: context, peer: peer, category: category, exceptionsContext: exceptionsContext, isNew: false), for: context.window)
     }, exceptionMenu: { exception in
         let peerId = exception.peer.id
         var items: [ContextMenuItem] = []
