@@ -1846,8 +1846,25 @@ func execute(inapp:inAppLink, window: Window? = nil, isExternal: Bool = false, a
                 controller = NotificationCategorySettingsController(context: context, category: .groupChats, focusOnItemTag: chatSubSection.flatMap(notificationCategoryEntryTag))
             case let .channels(chatSubSection):
                 controller = NotificationCategorySettingsController(context: context, category: .channels, focusOnItemTag: chatSubSection.flatMap(notificationCategoryEntryTag))
-            case .stories:
-                controller = NotificationPreferencesController(context)
+            case let .stories(storiesSubSection):
+                let tag: NotificationCategoryEntryTag?
+                switch storiesSubSection {
+                case .new:
+                    tag = .show
+                case .important:
+                    tag = .important
+                case .show_sender:
+                    tag = .preview
+                case .sound:
+                    tag = .sound
+                case .add_exception:
+                    tag = .addException
+                case .delete_exceptions:
+                    tag = .deleteExceptions
+                case .none:
+                    tag = nil
+                }
+                controller = NotificationCategorySettingsController(context: context, category: .stories, focusOnItemTag: tag)
             case let .reactions(reactionsSubSection):
                 let tag: ReactionNotificationEntryTag?
                 switch reactionsSubSection {

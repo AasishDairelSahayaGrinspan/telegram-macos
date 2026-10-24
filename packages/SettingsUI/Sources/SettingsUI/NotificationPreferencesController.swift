@@ -37,6 +37,7 @@ public enum NotificationsAndSoundsEntryTag: ItemListItemTag {
     case privateChats
     case groupChats
     case channels
+    case stories
 
     public var stableId: InputDataEntryId {
         switch self {
@@ -68,6 +69,8 @@ public enum NotificationsAndSoundsEntryTag: ItemListItemTag {
             return .custom(_id_category(.groupChats))
         case .channels:
             return .custom(_id_category(.channels))
+        case .stories:
+            return .custom(_id_category(.stories))
         }
     }
     
@@ -171,6 +174,16 @@ private func categoryEntry(sectionId: Int32, index: Int32, identifier: InputData
 }
 
 private func categoryValue(_ category: NotificationSettingsCategory, settings: GlobalNotificationSettingsSet) -> String {
+    if case .stories = category {
+        switch settings.privateChats.storySettings.mute {
+        case .default:
+            return strings().notificationSettingsTopChats
+        case .muted:
+            return strings().notificationSettingsOff
+        case .unmuted:
+            return strings().notificationSettingsOn
+        }
+    }
     return category.messageSettings(settings).enabled ? strings().notificationSettingsOn : strings().notificationSettingsOff
 }
 
@@ -223,7 +236,7 @@ private func notificationEntries(state: State, settings:InAppNotificationSetting
     entries.append(InputDataEntry.desc(sectionId: sectionId, index: index, text: .plain(strings().notificationSettingsMessageNotifications), data: InputDataGeneralTextData(viewType: .textTopItem)))
     index += 1
     
-    let categories: [NotificationSettingsCategory] = [.privateChats, .groupChats, .channels]
+    let categories: [NotificationSettingsCategory] = [.privateChats, .groupChats, .channels, .stories]
     for (i, category) in categories.enumerated() {
         let count = exceptions.filter { $0.hasCustomSettings(for: category) }.count
         let row = CategoryRow(title: category.title, value: categoryValue(category, settings: globalSettings), description: count > 0 ? strings().notificationSettingsExceptionsOther(count) : nil, viewType: i == 0 ? .firstItem : .innerItem)
