@@ -34,7 +34,7 @@ def block(text, marker):
 
 button = source("ChatInputSendButton")
 container = source("ChatInputView")
-constants = "\n".join(line for line in button.splitlines() if "static let field" in line)
+constants = "\n".join(line for line in button.splitlines() if "static let field" in line or "static let planeFlightOffset" in line)
 placement_start = container.index("        let sendFrame: NSRect")
 placement = container[placement_start:container.index("\n        let attachGhostFrame", placement_start)]
 parts = {
@@ -48,9 +48,12 @@ parts = {
     "__LAYOUT__": block(button, "public func updateLayout(size:"),
     "__SEND_SLOT__": block(container, "private func sendSlot("),
     "__PLACEMENT__": placement,
+    "__FIELD_TRANSITION__": block(button, "private func animateFieldTransition(").replace("{\n", "{\n        fieldTransitions.append((view, appearing))\n", 1),
+    "__PLANE_FLIGHT__": block(button, "private func animatePlaneFlight()"),
+    "__ACTIONS_LAYOUT__": block(source("ChatInputActionsView"), "public func updateLayout(size:"),
 }
 image_paths = {}
-for name in ["Icon_SearchField", "Icon_SearchClear", "Icon_Quote", "Icon_Quote_Collapse", "Icon_Quote_Expand", "star_small"]:
+for name in ["Icon_SearchField", "Icon_SearchClear", "Icon_Quote", "Icon_Quote_Collapse", "Icon_Quote_Expand", "star_small", "Icon_Entertainments", "Icon_SendMessage_Large"]:
     imageset = root / "Telegram-Mac/Assets.xcassets" / (name + ".imageset")
     images = json.loads((imageset / "Contents.json").read_text())["images"]
     image = next(image for image in images if image.get("filename") and image.get("scale") == "1x")

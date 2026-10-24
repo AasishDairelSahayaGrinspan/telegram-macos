@@ -20,7 +20,7 @@ struct ThemeFixture {
     struct Icons {
         var chat_input_star: CGImage { NSImage(named: "star_small")!.precomposed(.white) }
         var chat_header_done: CGImage { chat_input_star }
-        var send_message_large: CGImage { chat_input_star }
+        var send_message_large: CGImage { NSImage(named: "Icon_SendMessage_Large")!.precomposed(.white) }
     }
     let colors = Colors()
     let icons = Icons()
@@ -76,9 +76,23 @@ public final class ChatInputSendButton: View {
     __UPDATE__
     __LAYOUT__
 
-    func animateFieldTransition(_ view: NSView, appearing: Bool) { fieldTransitions.append((view, appearing)) }
-    func animatePlaneFlight() {}
+    __FIELD_TRANSITION__
+    __PLANE_FLIGHT__
     func animateSendIconChange(from previous: CGImage, frame: NSRect) {}
+}
+
+public final class ChatInputActionsView: View {
+    static let extraButtonSize: CGFloat = 40
+    let entertaiments = ImageButton()
+    let extraButtons: [ImageButton] = []
+    required public init(frame: NSRect) {
+        super.init(frame: frame)
+        entertaiments.set(image: NSImage(named: "Icon_Entertainments")!.precomposed(theme.colors.grayIcon), for: .Normal)
+        entertaiments.setFrameSize(NSMakeSize(40, 40))
+        addSubview(entertaiments)
+    }
+    required public init?(coder: NSCoder) { fatalError() }
+    __ACTIONS_LAYOUT__
 }
 
 final class ComposerFixture {
