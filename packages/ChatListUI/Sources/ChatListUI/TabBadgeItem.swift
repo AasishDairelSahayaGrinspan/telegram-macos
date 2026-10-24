@@ -15,6 +15,7 @@ import LocalAnimations
 
 private final class AvatarTabContainer : View {
     private let avatar = AvatarControl(font: .avatar(12))
+    private let disposable = MetaDisposable()
     private var selected: Bool = false
     private let circle: View = View()
     required init(frame frameRect: NSRect) {
@@ -34,6 +35,16 @@ private final class AvatarTabContainer : View {
     }
     func setPeer(account: Account, peer: Peer?) {
         avatar.setPeer(account: account, peer: peer)
+    }
+
+    func setAccount(_ account: Account) {
+        disposable.set((account.postbox.peerView(id: account.peerId) |> map { $0.peers[$0.peerId] } |> deliverOnMainQueue).start(next: { [weak self] peer in
+            self?.setPeer(account: account, peer: peer)
+        }))
+    }
+
+    deinit {
+        disposable.dispose()
     }
     
     override func updateLocalizationAndTheme(theme: PresentationTheme) {
@@ -56,9 +67,14 @@ private final class AvatarTabContainer : View {
 
         let from: CGFloat = selected ? 1 : 24 / frame.height
         let to: CGFloat = selected ? 24 / frame.height : 1
-        avatar.layer?.animateScaleSpring(from: from, to: to, duration: 0.3, removeOnCompletion: false, bounce: false, completion: { completed in
-            
-        })
+        if animated {
+            avatar.layer?.animateScaleSpring(from: from, to: to, duration: 0.3, removeOnCompletion: false, bounce: false)
+        } else {
+            avatar.layer?.removeAnimation(forKey: "transform")
+            var transform = CATransform3DMakeTranslation(avatar.bounds.midX, avatar.bounds.midY, 0)
+            transform = CATransform3DScale(transform, to, to, 1)
+            avatar.layer?.transform = CATransform3DTranslate(transform, -avatar.bounds.midX, -avatar.bounds.midY, 0)
+        }
         
         if animated {
             if selected {
@@ -130,7 +146,9 @@ public class TabAnimatedItem: TabItem {
     }
 
     public override func withUpdatedImages(_ image: CGImage, _ selectedImage: CGImage) -> TabItem {
-        return TabAnimatedItem(sticker, image: image, selectedImage: selectedImage, controller: self.controller, subNode: self.subNode, longHoverHandler: self.longHoverHandler)
+        let item = TabAnimatedItem(sticker, image: image, selectedImage: selectedImage, controller: self.controller, subNode: self.subNode, longHoverHandler: self.longHoverHandler)
+        item.accessibilityTitle = accessibilityTitle
+        return item
     }
 
     public override func makeView() -> NSView {
@@ -148,28 +166,27 @@ public class TabAnimatedItem: TabItem {
 
 public class TabBadgeItem: TabAnimatedItem {
     private let context:any AccountContextProtocol
-    public init(_ context: any AccountContextProtocol, controller:ViewController, image: CGImage, selectedImage: CGImage, longHoverHandler:((Control)->Void)? = nil) {
+    public init(_ context: any AccountContextProtocol, controller:ViewController, image: CGImage, selectedImage: CGImage, longHoverHandler:((Control)->Void)? = nil, subNode: Node? = nil) {
         self.context = context
-        super.init(.tab_chats, image: image, selectedImage: selectedImage, controller: controller, subNode:ChatListUIHooks.shared.makeTabBadgeNode(context), longHoverHandler: longHoverHandler)
+        super.init(.tab_chats, image: image, selectedImage: selectedImage, controller: controller, subNode: subNode ?? ChatListUIHooks.shared.makeTabBadgeNode(context), longHoverHandler: longHoverHandler)
     }
     public override func withUpdatedImages(_ image: CGImage, _ selectedImage: CGImage) -> TabItem {
-        return TabBadgeItem(context, controller: self.controller, image: image, selectedImage: selectedImage, longHoverHandler: self.longHoverHandler)
+        let item = TabBadgeItem(context, controller: self.controller, image: image, selectedImage: selectedImage, longHoverHandler: self.longHoverHandler, subNode: subNode)
+        item.accessibilityTitle = accessibilityTitle
+        return item
     }
 }
 public class TabAllBadgeItem: TabAnimatedItem {
     private let context:any AccountContextProtocol
-    private let disposable = MetaDisposable()
-    private var peer: Peer?
     public init(_ context: any AccountContextProtocol, image: CGImage, selectedImage: CGImage, controller:ViewController, subNode:Node? = nil, longHoverHandler:((Control)->Void)? = nil) {
         self.context = context
-        super.init(.tab_settings, image: image, selectedImage: selectedImage, controller: controller, subNode:ChatListUIHooks.shared.makeTabAllBadgeNode(context), longHoverHandler: longHoverHandler)
-    }
-    deinit {
-        disposable.dispose()
+        super.init(.tab_settings, image: image, selectedImage: selectedImage, controller: controller, subNode: subNode ?? ChatListUIHooks.shared.makeTabAllBadgeNode(context), longHoverHandler: longHoverHandler)
     }
     
     public override func withUpdatedImages(_ image: CGImage, _ selectedImage: CGImage) -> TabItem {
-        return TabAllBadgeItem(context, image: image, selectedImage: selectedImage, controller: self.controller, subNode: self.subNode, longHoverHandler: self.longHoverHandler)
+        let item = TabAllBadgeItem(context, image: image, selectedImage: selectedImage, controller: self.controller, subNode: self.subNode, longHoverHandler: self.longHoverHandler)
+        item.accessibilityTitle = accessibilityTitle
+        return item
     }
     
     public override func makeView() -> NSView {
@@ -194,9 +211,7 @@ public class TabAllBadgeItem: TabAnimatedItem {
          return lhs?.smallProfileImage != rhs?.smallProfileImage
          })
  */
-        disposable.set((context.account.postbox.peerView(id: context.account.peerId) |> map { $0.peers[$0.peerId] } |> deliverOnMainQueue).start(next: { [weak view] peer in
-            view?.setPeer(account: context.account, peer: peer)
-        }))
+        view.setAccount(context.account)
         
         return view
     }

@@ -412,7 +412,7 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
         let updateView = updateController.genericView
         let activeController = tabController.current === navigation ? navigation.controller : nil
         if activeController?.isLoaded() != true || !(activeController?.view is PeerListContainerView) {
-            let bottomInset: CGFloat = updateView.layoutState == .minimisize ? 10 : 60
+            let bottomInset: CGFloat = tabController.contentBottomInset + 12
             updateView.setFrameOrigin(NSMakePoint(updateView.frame.minX, bounds.height - updateView.frame.height - bottomInset))
         }
         let updateContainer: (ViewController) -> Void = { [weak self, updateView] controller in
@@ -448,7 +448,7 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
 
     private func layoutConnectingStatusView() {
         let size = connectingStatusView.frame.size
-        let y = bounds.height - size.height - 40 - 20
+        let y = bounds.height - size.height - tabController.contentBottomInset - 12
         connectingStatusView.setFrameOrigin(NSMakePoint(20, y))
     }
     
@@ -509,6 +509,8 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
         
         tabController.updateLocalizationAndTheme(theme: theme)
 
+        updateTabAccessibility()
+
         self.ready.set(combineLatest(queue: prepareQueue, self.chatList.ready.get(), self.settings.ready.get()) |> map { $0 && $1 })
         
         
@@ -523,6 +525,7 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
             }
             self.updateController.updateLayout(state, parentSize: self.frame.size, isChatList: true)
             self.updateChatListBottomOverlays()
+            self.layoutConnectingStatusView()
         }))
         
         tabController.didChangedIndex = { [weak self] index in
@@ -538,9 +541,12 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
 
     private func showCallsTab() {
         tabController.insert(tab: TabAnimatedItem(.tab_calls, image: theme.icons.tab_calls, selectedImage: theme.icons.tab_calls_active, controller: phoneCalls), at: 1)
+        previousIndex = tabController.selectedIndex
+        updateTabAccessibility()
     }
     private func hideCallsTab() {
         tabController.remove(at: 1)
+        previousIndex = tabController.selectedIndex
     }
     
     override var removeAfterDisapper: Bool {
@@ -732,6 +738,27 @@ class MainViewController: TelegramGenericViewController<MainController_View> {
         }
         self.previousTheme = theme
         self.previousIconColor = theme.colors.accentIcon
+        updateTabAccessibility()
+    }
+
+    private func updateTabAccessibility() {
+        for index in 0 ..< tabController.count {
+            let tab = tabController.tab(at: index)
+            let title: String
+            if tab.controller === contacts {
+                title = strings().contactsContacsSeparator
+            } else if tab.controller === phoneCalls {
+                title = strings().telegramLayoutRecentCallsViewController
+            } else if tab.controller === settings {
+                title = strings().telegramLayoutAccountController
+            } else {
+                title = strings().peerMediaSavedMessages
+            }
+            tab.accessibilityTitle = title
+            let control = tabController.control(for: index)
+            control.setAccessibilityLabel(title)
+            control.toolTip = title
+        }
     }
     
     private var previousIndex: Int? = nil
