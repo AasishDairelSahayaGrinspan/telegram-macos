@@ -446,8 +446,8 @@ public class ChatRowItem: TableRowItem {
                 height += additional
             }
    
-            if replyModel?.isSideAccessory == true {
-                height = max(48, height)
+            if let replyModel, replyModel.isSideAccessory {
+                height = max(48, height, replyOffset + replyModel.size.height + defaultContentTopOffset)
             }
         }
         if let _ = commentsBubbleData {
@@ -3191,10 +3191,20 @@ public class ChatRowItem: TableRowItem {
                     replyModel.measureSize(fill_size, sizeToFit: false)
                 }
             } else {
-                if _contentSize.width == 0 {
-                    replyModel.measureSize(200, sizeToFit: true)
-                } else {
-                    replyModel.measureSize(_contentSize.width - bubbleContentInset * 2, sizeToFit: true)
+                let bubbleFrame = ChatRowGeometry.bubbleFrame(.init(
+                    rowWidth: width,
+                    layoutFrame: NSMakeRect(defLeftInset, 0, bubbleFrameWidth, 0),
+                    leftInset: leftInset,
+                    isIncoming: isIncoming,
+                    isCenteredThread: chatInteraction.mode.isThreadMode && chatInteraction.chatLocation.threadMsgId == message?.id
+                ))
+                let contentFrame = ChatRowGeometry.contentFrame(.init(item: self, bubbleFrame: bubbleFrame))
+                let sideFrame = ChatRowGeometry.sideAccessoryFrame(.init(item: self, size: .zero, offset: 0, contentFrame: contentFrame))
+                let availableWidth = max(1, isIncoming ? width - rightInset - sideFrame.minX : sideFrame.maxX - leftInset)
+                let preferredWidth = _contentSize.width == 0 ? 200 : _contentSize.width - bubbleContentInset * 2
+                replyModel.measureSize(min(preferredWidth, availableWidth), sizeToFit: true)
+                if replyModel.size.width > availableWidth {
+                    replyModel.measureSize(availableWidth, sizeToFit: false)
                 }
             }
         }
