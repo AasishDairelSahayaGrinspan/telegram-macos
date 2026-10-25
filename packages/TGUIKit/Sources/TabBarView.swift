@@ -400,7 +400,8 @@ public class TabBarView: View {
         guard gesture != nil else {
             return
         }
-        if gesture?.isDragging == true {
+        let isDragging = gesture?.isDragging == true
+        if isDragging {
             updateSelection(at: point)
         }
         let index = Int(gesture!.position.rounded())
@@ -410,7 +411,7 @@ public class TabBarView: View {
             delegate?.scrollup()
         } else {
             selectedIndex = index
-            updateSelection(animated: true)
+            updateSelection(animated: true, playSelectedItem: isDragging)
             delegate?.didChange(selected: tabs[index], index: index)
         }
     }
@@ -435,14 +436,14 @@ public class TabBarView: View {
         }
     }
 
-    private func updateSelection(animated: Bool) {
+    private func updateSelection(animated: Bool, playSelectedItem: Bool = false) {
         let reduceMotion = self.reduceMotion()
         let animated = animated && !reduceMotion
         let transition: ContainedViewLayoutTransition = animated ? .animated(duration: 0.4, curve: .spring) : .immediate
         let previewIndex = gesture.map { Int($0.position.rounded()) } ?? selectedIndex
         for (index, control) in itemControls.enumerated() {
             let selected = index == previewIndex
-            if control.tabIsSelected != selected, let icon = control.subviews.first {
+            if control.tabIsSelected != selected || (selected && playSelectedItem), let icon = control.subviews.first {
                 control.tabIsSelected = selected
                 control.isSelected = selected
                 tabs[index].setSelected(selected, for: icon, animated: animated)

@@ -90,12 +90,14 @@ private final class AvatarTabContainer : View {
 }
 
 
-private final class TabAnimatedIconView : LottiePlayerView {
+final class TabAnimatedIconView : LottiePlayerView {
     private let sticker: LocalAnimatedSticker
+    private let animationData: Data?
     private var selected: Bool = false
 
-    init(sticker: LocalAnimatedSticker) {
+    init(sticker: LocalAnimatedSticker, animationData: Data? = nil) {
         self.sticker = sticker
+        self.animationData = animationData
         super.init(frame: NSMakeRect(0, 0, 48, 48))
         isEventLess = true
     }
@@ -129,12 +131,12 @@ private final class TabAnimatedIconView : LottiePlayerView {
     }
 
     private func apply(playing: Bool) {
-        guard let data = sticker.data else {
+        guard let data = animationData ?? sticker.data else {
             return
         }
         let policy: LottiePlayPolicy = playing ? .toEnd(from: 0) : .toEnd(from: .max)
         let animation = LottieAnimation(compressed: data, key: .init(key: .bundle(sticker.rawValue), size: frame.size), cachePurpose: .none, playPolicy: policy, colors: colors, runOnQueue: .mainQueue())
-        set(animation, saveContext: true)
+        set(animation, reset: playing, saveContext: true)
     }
 }
 

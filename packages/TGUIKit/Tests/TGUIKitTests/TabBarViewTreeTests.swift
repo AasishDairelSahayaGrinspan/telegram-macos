@@ -34,12 +34,17 @@ private final class CustomTabIcon: View {
 }
 
 private final class CustomTabItem: TabItem {
+    var animatedSelections = 0
+
     override func makeView() -> NSView {
         return CustomTabIcon(frame: NSMakeRect(0, 0, 30, 30))
     }
 
     override func setSelected(_ selected: Bool, for view: NSView, animated: Bool) {
         (view as? CustomTabIcon)?.selected = selected
+        if selected && animated {
+            animatedSelections += 1
+        }
     }
 }
 
@@ -75,6 +80,95 @@ final class TabBarViewTreeTests: XCTestCase {
     private func center(_ bar: TabBarView, _ index: Int) -> NSPoint {
         let frame = bar.control(for: index).frame
         return NSMakePoint(frame.midX, frame.midY)
+    }
+
+    private func makePlaybackBar(selected: Int = 0) -> (TabBarView, [CustomTabItem]) {
+        let bar = TabBarView(frame: NSMakeRect(0, 0, 333, 48))
+        bar.reduceMotion = { false }
+        let items = (0 ..< 4).map { _ -> CustomTabItem in
+            let original = makeTab()
+            return CustomTabItem(image: original.image, selectedImage: original.selectedImage, controller: original.controller)
+        }
+        for item in items {
+            bar.addTab(item)
+        }
+        bar.setSelectedIndex(selected, respondToDelegate: false, animated: false)
+        return (bar, items)
+    }
+
+    func testDragCommitPlaysOnlyTheDestinationOnceOnRelease() {
+        for (source, destinations) in [(0, [1, 2, 3]), (3, [2, 1, 0])] {
+            let (bar, items) = makePlaybackBar(selected: source)
+            let delegate = TabSelectionDelegate()
+            bar.delegate = delegate
+            bar.beginSelection(at: center(bar, source))
+            for index in destinations {
+                bar.updateSelection(at: center(bar, index))
+                XCTAssertTrue(items.allSatisfy { $0.animatedSelections == 0 })
+            }
+            let target = destinations.last!
+            bar.endSelection(at: center(bar, target))
+            XCTAssertEqual(items[target].animatedSelections, 1)
+            XCTAssertEqual(items.map { $0.animatedSelections }.reduce(0, +), 1)
+            XCTAssertEqual(delegate.changes, [target])
+            bar.endSelection(at: center(bar, target))
+            XCTAssertEqual(items[target].animatedSelections, 1)
+        }
+    }
+
+    func testFractionalDragReleasePlaysTheNearestTab() {
+        let (bar, items) = makePlaybackBar()
+        bar.beginSelection(at: center(bar, 0))
+        bar.updateSelection(at: center(bar, 1))
+        let first = center(bar, 1)
+        let second = center(bar, 2)
+        bar.endSelection(at: NSMakePoint(first.x + (second.x - first.x) * 0.6, first.y))
+        XCTAssertEqual(bar.selectedIndex, 2)
+        XCTAssertEqual(items[2].animatedSelections, 1)
+        XCTAssertEqual(items[1].animatedSelections, 0)
+    }
+
+    func testClickPlaybackDoesNotRestartOnRelease() {
+        let (bar, items) = makePlaybackBar()
+        let point = center(bar, 3)
+        bar.beginSelection(at: point)
+        XCTAssertEqual(items[3].animatedSelections, 1)
+        bar.endSelection(at: point)
+        XCTAssertEqual(items[3].animatedSelections, 1)
+    }
+
+    func testCancelledDragDoesNotPlayItsPreviewedDestination() {
+        let (bar, items) = makePlaybackBar()
+        bar.beginSelection(at: center(bar, 0))
+        bar.updateSelection(at: center(bar, 3))
+        bar.cancelSelection()
+        bar.endSelection(at: center(bar, 3))
+        XCTAssertEqual(bar.selectedIndex, 0)
+        XCTAssertEqual(items[3].animatedSelections, 0)
+    }
+
+    func testDraggingBackToTheOriginalTabDoesNotPlayItAgain() {
+        let (bar, items) = makePlaybackBar()
+        let delegate = TabSelectionDelegate()
+        bar.delegate = delegate
+        let start = center(bar, 0)
+        bar.beginSelection(at: start)
+        bar.updateSelection(at: center(bar, 2))
+        bar.updateSelection(at: start)
+        bar.endSelection(at: start)
+        XCTAssertTrue(items.allSatisfy { $0.animatedSelections == 0 })
+        XCTAssertTrue(delegate.changes.isEmpty)
+        XCTAssertEqual(delegate.scrollCount, 1)
+    }
+
+    func testReduceMotionDisablesDragCommitPlayback() {
+        let (bar, items) = makePlaybackBar()
+        bar.reduceMotion = { true }
+        bar.beginSelection(at: center(bar, 0))
+        bar.updateSelection(at: center(bar, 3))
+        bar.endSelection(at: center(bar, 3))
+        XCTAssertEqual(bar.selectedIndex, 3)
+        XCTAssertTrue(items.allSatisfy { $0.animatedSelections == 0 })
     }
 
     private func selectionLayer(_ bar: TabBarView) throws -> TabSelectionTestLayer {

@@ -1,12 +1,17 @@
 import AppKit
 import XCTest
 import TGUIKit
+import TelegramMedia
+import TLottie
 @testable import ChatListUI
 
 private final class FloatingTabBarTestRow: TableRowItem {
     override var height: CGFloat {
         return 60
     }
+}
+
+private final class TabAnimationTestRenderer: TLottieBridge, R_LottieBridge {
 }
 
 final class FloatingTabBarIntegrationTests: XCTestCase {
@@ -55,6 +60,40 @@ final class FloatingTabBarIntegrationTests: XCTestCase {
         XCTAssertTrue(replacement.controller === controller)
         XCTAssertTrue(replacement.subNode === badge)
         XCTAssertEqual(replacement.accessibilityTitle, "Chats")
+    }
+
+    private func waitUntil(_ condition: () -> Bool) -> Bool {
+        let deadline = Date().addingTimeInterval(3)
+        while !condition() && Date() < deadline {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.004))
+        }
+        return condition()
+    }
+
+    func testSelectedTabPreviewStartsPlayingWithoutChangingColors() throws {
+        let resource = TestImages.catalog.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/tgs/tab_chats.tgs")
+        let data = try Data(contentsOf: resource)
+        let previousRenderer = makeRLottie
+        makeRLottie = { json, _ in TabAnimationTestRenderer(json: json) }
+        let icon = TabAnimatedIconView(sticker: .tab_chats, animationData: data)
+        let player: LottiePlayerView = icon
+        defer {
+            player.set(nil)
+            makeRLottie = previousRenderer
+        }
+        icon.setSelected(true, animated: false)
+        XCTAssertTrue(waitUntil { player.currentState == .finished })
+        let finalFrame = try XCTUnwrap(player.currentFrame)
+        XCTAssertGreaterThan(finalFrame, 0)
+        let colors = try XCTUnwrap(player.animation).colors
+        icon.setSelected(true, animated: true)
+        XCTAssertEqual(player.animation?.colors, colors)
+        guard waitUntil({ player.currentFrame.map { $0 < finalFrame } ?? false }) else {
+            XCTFail("The selected icon must restart playback after its static preview")
+            return
+        }
+        let firstFrame = try XCTUnwrap(player.currentFrame)
+        XCTAssertTrue(waitUntil { player.currentFrame.map { $0 > firstFrame } ?? false })
     }
 
     func testLastRowCanScrollAboveTheFloatingBar() {
