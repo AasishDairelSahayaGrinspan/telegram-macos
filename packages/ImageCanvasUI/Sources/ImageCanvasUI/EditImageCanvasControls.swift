@@ -285,7 +285,16 @@ final class EditImageCanvasTopBar: View {
             centerButtons.append(drawTypeButton(drawType))
             centerButtons.append(flipButton())
         case let .vector(type):
-            let button = makeGlassIconButton(EditImageCanvasGlyph.vector(type), label: strings().editImageCanvasControllerShapeArrow)
+            let label: String
+            switch type.next {
+            case .oneSidedArrow:
+                label = "Switch to One-Sided Arrow" //TODOLANG
+            case .twoSidedArrow:
+                label = "Switch to Two-Sided Arrow" //TODOLANG
+            case .line:
+                label = "Switch to Line" //TODOLANG
+            }
+            let button = makeGlassIconButton(EditImageCanvasGlyph.vector(type), label: label)
             button.set(handler: { [weak self] _ in
                 self?.arguments?.cycleVectorType()
             }, for: .Click)
